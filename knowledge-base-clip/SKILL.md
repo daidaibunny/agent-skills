@@ -28,32 +28,67 @@ downloading, approval gating, and automatic ingest.
 
 ## Content Extraction Failure Handling
 
-Content behind walled gardens (WeChat Official Account articles) may be protected by
-CAPTCHA, verification pages, or login requirements. The browser-capable agent must
-handle these gracefully:
+Content behind walled gardens (WeChat Official Account articles, X posts, paywalled
+sites) may be protected by CAPTCHA, login requirements, or anti-bot detection. The
+browser-capable agent must apply a tiered strategy rather than cycling through futile
+retries.
 
-1. **Persistent browser session**: Use a persistent browser profile (for example a
-   Playwright `user_data_dir` or `browserContext.storageState`) that maintains WeChat
-   web login cookies across sessions. This avoids triggering CAPTCHA on every request.
+### Tier 1 — Persistent Browser Profile (Primary)
 
-2. **CAPTCHA detection**: If the browser agent encounters a CAPTCHA or verification
-   page (for example `mp.weixin.qq.com/mp/wappoc_appmsgcaptcha`), it must:
-   - Recognize the CAPTCHA immediately from the page URL or content.
-   - **Stop after at most 3 attempts.** Do NOT cycle through curl, Jina Reader, search
-     engines, or repeated browser interactions. Multiple approaches against the same
-     CAPTCHA-protected page are futile.
-   - Report to the user via the approval channel: "This article requires CAPTCHA
-     verification. Please complete the verification manually in the browser, or share
-     the article content directly."
+Maintain a persistent browser profile for each walled-garden platform on the Hermes
+server. The profile stores login cookies across sessions.
 
-3. **Login expiry**: If the browser profile has expired and requires re-login (for
-   example WeChat web scan), report the issue to the user rather than attempting
-   automated login.
+1. **Profile directory convention**:
+   ```text
+   ~/.hermes/browser-profiles/wechat/    # WeChat web (mp.weixin.qq.com)
+   ~/.hermes/browser-profiles/x/         # X / Twitter
+   ```
+2. **Initial setup**: Open each platform URL once with the persistent profile, complete
+   the login flow (WeChat: scan QR code with the WeChat app. X: enter credentials).
+   Subsequent sessions reuse the stored cookies.
+3. **Cookie lifespan**: Be aware that platform cookies expire. WeChat web sessions
+   typically last hours to a day. X sessions vary. When cookies expire and CAPTCHA
+   reappears, fall through to Tier 3 — do not cycle retries.
+4. **Volume considerations**: This knowledge base is human-triggered (the user manually
+   sends URLs from their phone). The access pattern is low frequency (a few articles per
+   day), single-URL access, not bulk scraping. This pattern is unlikely to trigger
+   aggressive anti-bot countermeasures that would risk account suspension.
 
-4. **Timeout and retry guardrails**: Adhere to the agent's configured tool loop
-   guardrails. If the URL cannot be accessed after 3 distinct approaches (for example
-   direct browser, reader service, search index), report failure and stop. Do not
-   retry the same URL with slight variations.
+### Tier 2 — Platform-Specific Alternatives
+
+Before declaring failure, try one platform-appropriate alternative:
+
+| Platform | Alternative |
+|----------|-------------|
+| WeChat (mp.weixin.qq.com) | Sogou WeChat search (`weixin.sogou.com`) for cached copies |
+| X / Twitter | Nitter public instances (may also be rate-limited) |
+| General web | Standard HTTP fetch via `webfetch` or Jina Reader (`r.jina.ai`) |
+
+Try at most ONE alternative per URL. Do not cycle.
+
+### Tier 3 — Fast Failure (MANDATORY)
+
+If both Tier 1 (persistent profile) and Tier 2 (one alternative) fail:
+
+1. **Recognize CAPTCHA immediately** from the page URL or content. Key signatures:
+   - `mp.weixin.qq.com/mp/wappoc_appmsgcaptcha` (WeChat verification)
+   - Page title "环境异常" or "验证码" (WeChat environment check)
+   - Any login wall, Cloudflare challenge, or JavaScript challenge page.
+
+2. **Stop after at most 2 attempts total** (Tier 1 profile + one Tier 2 alternative).
+   Do NOT cycle through curl, Jina Reader, search engines, browser JavaScript injection,
+   or repeated browser interactions after the first failure.
+
+3. **Report to the user via the approval channel** with a clear message:
+
+   ```text
+   无法自动访问这篇文章。遇到了 [CAPTCHA 验证/登录墙]。
+   
+   替代方案：请将文章内容复制粘贴发送给我，或者手动在浏览器中完成验证后通知我重试。
+   ```
+
+4. **Adhere to the agent's configured tool loop guardrails.** Do not retry the
+   same URL with slight variations of the same approach.
 
 ## Clip Protocol
 
