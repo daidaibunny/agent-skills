@@ -26,6 +26,35 @@ downloading, approval gating, and automatic ingest.
 - Treat `raw/` as the capture destination. Clip writes formatted markdown and downloaded
   images there, following the same conventions as manual user capture.
 
+## Content Extraction Failure Handling
+
+Content behind walled gardens (WeChat Official Account articles) may be protected by
+CAPTCHA, verification pages, or login requirements. The browser-capable agent must
+handle these gracefully:
+
+1. **Persistent browser session**: Use a persistent browser profile (for example a
+   Playwright `user_data_dir` or `browserContext.storageState`) that maintains WeChat
+   web login cookies across sessions. This avoids triggering CAPTCHA on every request.
+
+2. **CAPTCHA detection**: If the browser agent encounters a CAPTCHA or verification
+   page (for example `mp.weixin.qq.com/mp/wappoc_appmsgcaptcha`), it must:
+   - Recognize the CAPTCHA immediately from the page URL or content.
+   - **Stop after at most 3 attempts.** Do NOT cycle through curl, Jina Reader, search
+     engines, or repeated browser interactions. Multiple approaches against the same
+     CAPTCHA-protected page are futile.
+   - Report to the user via the approval channel: "This article requires CAPTCHA
+     verification. Please complete the verification manually in the browser, or share
+     the article content directly."
+
+3. **Login expiry**: If the browser profile has expired and requires re-login (for
+   example WeChat web scan), report the issue to the user rather than attempting
+   automated login.
+
+4. **Timeout and retry guardrails**: Adhere to the agent's configured tool loop
+   guardrails. If the URL cannot be accessed after 3 distinct approaches (for example
+   direct browser, reader service, search index), report failure and stop. Do not
+   retry the same URL with slight variations.
+
 ## Clip Protocol
 
 ### Step 1 — Content Extraction
