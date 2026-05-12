@@ -1,6 +1,6 @@
 ---
 name: knowledge-base-ingest
-description: Use this skill only when the user explicitly asks to ingest, process, file, or import a raw source into the personal knowledge base.
+description: Use this skill only when the user explicitly asks to ingest, process, file, or import a raw source file that already exists under raw/. The source must be a local file path (for example raw/llm/article.md), not a URL. If the user provides a URL such as a WeChat article link, do not load this skill — load knowledge-base-clip instead.
 ---
 
 # Knowledge Base Ingest
