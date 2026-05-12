@@ -1,0 +1,4 @@
+interface:
+  display_name: "Knowledge Base Research"
+  short_description: "Research a topic and batch-ingest high-quality sources"
+  default_prompt: "Research this topic and ingest the best sources into my knowledge base."

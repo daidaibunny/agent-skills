@@ -1,0 +1,4 @@
+interface:
+  display_name: "Asset Tracker Changelog Push SOP"
+  short_description: "Verify remote deploy state through asset-tracker-aws, then push the matching app update."
+  default_prompt: "Use $asset-tracker-changelog-push-sop to confirm the production host is correctly updated through the saved asset-tracker-aws SSH alias and only then push the matching finance--tracker changelog into the in-app release-note stream."

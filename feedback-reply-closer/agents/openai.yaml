@@ -1,0 +1,4 @@
+interface:
+  display_name: "Feedback Reply Closer"
+  short_description: "Send approved replies and close feedback."
+  default_prompt: "Post the approved admin reply to feedback and close the feedback item with safeguards."

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Asset Tracker Release Deploy SOP"
+  short_description: "Release, deploy through asset-tracker-aws, verify health, then push the in-app update."
+  default_prompt: "Use $asset-tracker-release-deploy-sop to release the latest finance--tracker version end to end through the saved asset-tracker-aws SSH alias, verify the remote deploy is healthy, and only then push the matching in-app changelog."

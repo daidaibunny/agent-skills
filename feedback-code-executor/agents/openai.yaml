@@ -1,0 +1,4 @@
+interface:
+  display_name: "Feedback Code Executor"
+  short_description: "Execute approved feedback fixes safely."
+  default_prompt: "After explicit approval, apply code changes, run tests, and prepare git commit/push output."

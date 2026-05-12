@@ -1,0 +1,4 @@
+interface:
+  display_name: "Release Changelog Publisher"
+  short_description: "Draft and publish changelog + GitHub release with matching tag."
+  default_prompt: "Detect current version, draft release notes for approval, then on confirmation update CHANGELOG.md, create matching tag vX.Y.Z, publish GitHub release, and return release URL/commit/tag."

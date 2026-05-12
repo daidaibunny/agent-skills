@@ -1,0 +1,4 @@
+interface:
+  display_name: "Asset Tracker Production SSH"
+  short_description: "SSH into the finance--tracker production host and run the standard remote checks or deploy commands."
+  default_prompt: "Use $asset-tracker-production-ssh to inspect or operate the finance--tracker production server through the saved SSH alias and standard remote commands."

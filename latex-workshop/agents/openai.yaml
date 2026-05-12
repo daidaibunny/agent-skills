@@ -1,0 +1,4 @@
+interface:
+  display_name: "LaTeX Workflow"
+  short_description: "LaTeX projects in Cursor"
+  default_prompt: "Use $latex-workshop to set up or edit this LaTeX project in a latex_code folder with a modular structure and a clean bibliography workflow."

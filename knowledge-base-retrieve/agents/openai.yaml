@@ -1,0 +1,4 @@
+interface:
+  display_name: "Knowledge Base Retrieve"
+  short_description: "Retrieve context from the personal knowledge base"
+  default_prompt: "Reference my knowledge base for this."

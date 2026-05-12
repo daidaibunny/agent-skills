@@ -1,0 +1,4 @@
+interface:
+  display_name: "Knowledge Base Ingest"
+  short_description: "Ingest a raw source into the personal knowledge base"
+  default_prompt: "Ingest this source into my knowledge base."

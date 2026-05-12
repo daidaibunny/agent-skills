@@ -1,0 +1,4 @@
+interface:
+  display_name: "Asset Tracker Server Update SOP"
+  short_description: "Standardized asset-tracker-aws deploy + verification flow for this project."
+  default_prompt: "Use $asset-tracker-server-update-sop to update finance--tracker through the saved asset-tracker-aws SSH alias and verify backend, Postgres, Redis, and nginx health before any changelog push."

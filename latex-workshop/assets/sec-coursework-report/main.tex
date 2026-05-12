@@ -1,0 +1,237 @@
+\documentclass[12pt,a4paper]{article}
+
+\usepackage[a4paper,margin=1in]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage{setspace}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{tabularx}
+\usepackage{longtable}
+\usepackage{enumitem}
+\usepackage{capt-of}
+\usepackage{csquotes}
+\usepackage[hidelinks]{hyperref}
+\usepackage[round,authoryear]{natbib}
+
+\setstretch{1.15}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0.7em}
+\setlist[itemize]{leftmargin=1.5em}
+\setlist[enumerate]{leftmargin=1.8em}
+\newcommand{\studentname}{Yiwei LI}
+\newcommand{\studentid}{20513831}
+\newcommand{\modulecode}{COMP3052}
+\newcommand{\reporttitle}{Lab Report - Passwords}
+\newcommand{\submissiondate}{22 March 2026}
+\newcommand{\reportwordcount}{958}
+
+\newcommand{\appendixfigurecaption}[2]{%
+	\captionof{figure}{#1}
+	\label{#2}
+	\vspace{0.6em}
+}
+
+\newcommand{\appendixwideimage}[2][0.9\linewidth]{%
+	\includegraphics[width=#1]{figures/#2}\par\vspace{0.7em}
+}
+
+\newcommand{\appendiximagepair}[2]{%
+	\noindent
+	\includegraphics[width=0.49\linewidth]{figures/#1}\hfill
+	\includegraphics[width=0.49\linewidth]{figures/#2}\par\vspace{0.7em}
+}
+
+\begin{document}
+
+\hypersetup{pageanchor=false}
+\begin{titlepage}
+	\centering
+	\vspace*{2.4cm}
+	{\Large \modulecode \par}
+	\vspace{0.7cm}
+	{\huge \reporttitle \par}
+	\vspace{1.4cm}
+	{\large Coursework 01 \par}
+	\vfill
+		\begin{tabular}{>{\bfseries}p{4.2cm}p{8cm}}
+			Name: & \studentname \\
+			Student ID: & \studentid \\
+			Module Code: & \modulecode \\
+			Date: & \submissiondate \\
+			Word Count: & \reportwordcount \\
+		\end{tabular}
+	\vfill
+	{\large University of Nottingham Ningbo China \par}
+\end{titlepage}
+\clearpage
+\hypersetup{pageanchor=true}
+
+\section{Introduction}
+Passwords have been widely used for authentication in modern networks services and computational systems in recent decades, whereas they are known to be vulnerable to various attacks. This report proposes a password and authentication policy for a network with both ordinary users and privileged administrators. The design combines
+observations from the lab experience with current guidance from NIST and the UK National Cyber Security
+Centre (NCSC).
+
+\section{Proposed Password and Authentication Policy}
+The following policy for the network is proposed as:
+
+\begin{itemize}
+	\item All user passwords must be at least 15 characters long. 
+	\item Administrator or sudo-capable accounts should not reuse passwords on any other account.
+	\item Password validity should be limited to 30 days, with a warning period of 3 days and a
+	further 3-day grace period before inactivation.
+	\item Passwords must contain upper-case, lower-case, numeric, and special characters, in line
+	with the stronger PAM checks explored in the lab.
+	\item The system must block common passwords, dictionary words, leaked passwords, and obvious variants of those terms.
+	\item High-risk accounts, especially administrators, remote access, VPN, and internet-facing
+	accounts, must use multi-factor authentication (MFA).
+	\item Passwords must never be stored in plain text. They should be protected using a salted,
+	adaptive password hashing scheme.
+	\item The login service should temporarily lock an account after five failed
+	logins, and all logon attempts should be logged for audition.
+\end{itemize}
+
+The policy aligns with the lab materials in terms of PAM enforcement, password aging, and
+format checks configuration. It aims to enhance password security and reduce the risk of being cracked when facing malicious attacks.
+\section{Objective Justification}
+This policy is supported by lab evidence and modern guidance. NIST states that single-factor passwords should be at least 15 characters
+long, that verifiers should allow passwords of at least 64 characters, compare proposed
+passwords against blocklists of common and compromised values, and avoid relying only on
+simple composition formulae \citep{nist80063b2025}. The policy therefore adopts a 15-character
+minimum, paired with character-mix checks, deny lists, password history, rate limiting, and
+MFA for privileged access.
+
+NIST also states that stored passwords should be salted and hashed using a tunable scheme
+\citep{nist80063b2025}. NCSC recommends lockout and MFA for important accounts
+\citep{ncscPolicy2018}, and notes that long multi-word passwords can improve usability
+\citep{ncscThreeWords2021}. Lab evidence supports this. Appendix
+Figure~\ref{fig:appendix-default-pam-checks} shows the default \texttt{pam\_unix}
+configuration and a weak-password change attempt,
+Figure~\ref{fig:appendix-strengthened-pam-checks} records the stricter
+\texttt{pam\_cracklib} rule, and Figure~\ref{fig:appendix-hash-and-cracking-demo} in Appendix
+shows that weak passwords remain recoverable after hashing. Figure~\ref{fig:appendix-user-creation-sudo} shows why sudo-capable accounts deserve stronger
+protection, while Figure~\ref{fig:appendix-chage-policy} confirms that Linux can
+enforce the intended 30/3/3 aging settings. The additional \texttt{hashcat} comparisons in Figure~\ref{fig:appendix-rule-attack-comparison} and
+Figure~\ref{fig:appendix-mask-attack-comparison} show that some passwords yield to rule-based
+transformations, while others depend on short searchable structure.
+
+It is found that password-composition policies can impose usability costs without commensurate security gains \citep{egelman2011passwords}.
+\citet{florencio2007strong} argue that, in online systems with limited login attempts, the
+security return from increasingly elaborate composition rules is often modest once a reasonable
+baseline has been met. For higher-value accounts, stronger protection is better achieved by
+additional authentication. \citet{doerfler2019login} report that device-based login challenges
+blocked more than 94\% of phishing-rooted hijacking attempts in their study, while
+\citet{thomas2019breach} claimed that 1.5\% of observed web logins involved breached
+credentials. Taken together, these findings justify deny lists, rate limiting, and MFA as
+necessary complements to password rules.
+
+\section{Reflection on Lab Experience}
+The tasks in labs equipped us with hands-on experiences on hashcat tool for password cracking and analysis use, throwing insights on the design of strong and hard-to-crack passwords building upon lessons in historical password leakage.
+
+The contrast between the default behaviour in
+Figure~\ref{fig:appendix-default-pam-checks} and the stricter configuration in
+Figure~\ref{fig:appendix-strengthened-pam-checks} showed that basic rejection (in traditional pam) is not the same
+as strong enforcement. The default configuration offered only limited resistance to patterned
+choices, so it was difficult to defend a policy based on traditional Linux settings alone.
+
+In addition, Figure~\ref{fig:appendix-chage-policy} demonstrates that
+password-age settings can be changed quickly with \texttt{chage}, while Appendix
+Figure~\ref{fig:appendix-user-creation-sudo} shows that \texttt{sudo} privileges immediately
+change the risk profile of an account. Password policy therefore cannot be separated from
+privilege management in modern network and systems.
+
+In conclusion, the lab experience demonstrates that a defensible password policy should reduce reliance on user memory tricks and shift security
+work toward deny lists, rate limiting, secure hash storage, monitoring.
+
+\section{Additional Experiments}
+Going beyond the tasks in lab sessions, I also have used the \texttt{hashcat} tool to compare attack
+strategies rather than simply repeating the supplied examples. I began The first experiment,
+shown in Figure~\ref{fig:appendix-rule-attack-comparison}, by resetting the provided hash
+set, running a straight dictionary attack with \texttt{dicts/small.txt}, and then repeated the test
+with \texttt{rules/best64.rule} applied to the same dictionary. In my attempt, the straight attack
+recovered only one password, whereas the rule-based version recovered 53. I inspected that the produced result is
+hugely different because the extra recoveries came from 64 patterns of predictable edits that users often treat as
+improvement, such as case changes, suffixes, or minor transformations. It therefore verifies 
+that simple complexity tricks are not enough when an attacker applies widely known standard
+cracking rules. 
+
+I started another experiment as shown in Figure~\ref{fig:appendix-mask-attack-comparison}. It uses mask attacks to test whether short
+structured passwords can be recovered even when they are not ordinary dictionary words. I
+compared an upper-case seven-character mask with a short all-character mask and then
+reviewed the recovered entries. In my run, both masks exhausted their search spaces quickly in minutes, as the length and rules were rather computationally effective,
+but produced no new recoveries beyond the passwords already present in the potfile. This is
+still informative because it shows that mask attacks are highly dependent on selecting the
+right pattern in advance, indicating that this approach could be less-effective to handle certain passwords with limited compositional knowledge. 
+
+Together, these experiments extend the basic lab knowledge by linking the
+proposed policy to two realistic attack modes in hashcat: rule-based guessing and structured masked brute-force search.
+
+
+
+%TC:ignore
+\bibliographystyle{plainnat}
+\bibliography{references}
+
+\appendix
+
+\section{Appendix: Evidence}
+
+\subsection{Core Lab Evidence}
+\appendixfigurecaption{Creation of the test account \texttt{uriforcw1} and group information modification.}{fig:appendix-user-creation-sudo}
+\begingroup
+\centering
+\appendixwideimage[0.72\linewidth]{appendix-user-creation-sudo-panel-a-b.png}
+\appendiximagepair{appendix-user-creation-sudo-panel-c.png}{appendix-user-creation-sudo-panel-d.png}
+\endgroup
+
+\appendixfigurecaption{Password aging policy modification.}{fig:appendix-chage-policy}
+\begingroup
+\centering
+\appendixwideimage[0.82\linewidth]{appendix-chage-policy.png}
+\endgroup
+
+\appendixfigurecaption{Default PAM checks.}{fig:appendix-default-pam-checks}
+\begingroup
+\centering
+\appendixwideimage[0.94\linewidth]{appendix-default-pam-checks.png}
+\endgroup
+
+\appendixfigurecaption{Strengthened PAM checks.}{fig:appendix-strengthened-pam-checks}
+\begingroup
+\centering
+\appendixwideimage[0.94\linewidth]{appendix-strengthened-pam-checks-panel-a-b.png}
+\appendixwideimage[0.94\linewidth]{appendix-strengthened-pam-checks-panel-c.png}
+\appendixwideimage[0.94\linewidth]{appendix-strengthened-pam-checks-panel-d-e.png}
+\endgroup
+
+\appendixfigurecaption{Hash and cracking demo.}{fig:appendix-hash-and-cracking-demo}
+\begingroup
+\centering
+\appendixwideimage[0.9\linewidth]{appendix-hash-and-cracking-demo-panel-a-b-c-d.png}
+\appendixwideimage[0.82\linewidth]{appendix-hash-and-cracking-demo-panel-e-f.png}
+\endgroup
+
+\subsection{Additional Experiment 1: Straight Attack Versus Rule Attack}
+\appendixfigurecaption{Straight attack and rule attack comparison.}{fig:appendix-rule-attack-comparison}
+\begingroup
+\centering
+\appendixwideimage[0.86\linewidth]{appendix-rule-attack-comparison-panel-a-b.png}
+\appendixwideimage[0.78\linewidth]{appendix-rule-attack-comparison-panel-d.png}
+\appendixwideimage[0.86\linewidth]{appendix-rule-attack-comparison-panel-e.png}
+\appendixwideimage[0.78\linewidth]{appendix-rule-attack-comparison-panel-f.png}
+\endgroup
+
+\subsection{Additional Experiment 2: Targeted Mask Attacks}
+\appendixfigurecaption{Targeted mask attacks.}{fig:appendix-mask-attack-comparison}
+\begingroup
+\centering
+\appendixwideimage[0.86\linewidth]{appendix-mask-attack-comparison-panel-a-b-c.png}
+\appendixwideimage[0.78\linewidth]{appendix-mask-attack-comparison-panel-d.png}
+\appendixwideimage[0.86\linewidth]{appendix-mask-attack-comparison-panel-e.png}
+\appendixwideimage[0.78\linewidth]{appendix-mask-attack-comparison-panel-f-h.png}
+\endgroup
+%TC:endignore
+
+\end{document}

@@ -1,0 +1,73 @@
+[
+  {
+    "id": "internal_openapi_doc",
+    "name": "Internal OpenAPI Document",
+    "method": "GET",
+    "url": "${FEEDBACK_OPENAPI_URL}",
+    "enabled_if_env": "FEEDBACK_OPENAPI_URL",
+    "headers": {
+      "X-API-Key": "${FEEDBACK_API_TOKEN}"
+    },
+    "use_admin_session": true
+  },
+  {
+    "id": "internal_admin_feedback",
+    "name": "Internal Admin Feedback API",
+    "method": "GET",
+    "url": "${FEEDBACK_API_BASE_URL}/api/admin/feedback",
+    "headers": {
+      "X-API-Key": "${FEEDBACK_API_TOKEN}"
+    },
+    "use_admin_session": true
+  },
+  {
+    "id": "internal_dashboard_refresh",
+    "name": "Internal Dashboard Refresh API",
+    "method": "GET",
+    "url": "${FEEDBACK_API_BASE_URL}/api/dashboard?refresh=true",
+    "headers": {
+      "X-API-Key": "${FEEDBACK_API_TOKEN}"
+    },
+    "use_admin_session": true
+  },
+  {
+    "id": "internal_feedback_summary",
+    "name": "Internal Feedback Summary API",
+    "method": "GET",
+    "url": "${FEEDBACK_API_BASE_URL}/api/feedback/summary",
+    "headers": {
+      "X-API-Key": "${FEEDBACK_API_TOKEN}"
+    },
+    "use_admin_session": true
+  },
+  {
+    "id": "yahoo_chart",
+    "name": "Yahoo Chart Sample",
+    "method": "GET",
+    "url": "https://query1.finance.yahoo.com/v8/finance/chart/AAPL?interval=1h&range=5d"
+  },
+  {
+    "id": "eastmoney_quote",
+    "name": "Eastmoney Quote Sample",
+    "method": "GET",
+    "url": "https://push2.eastmoney.com/api/qt/stock/get?secid=1.600519&fields=f43,f57,f58"
+  },
+  {
+    "id": "eastmoney_search",
+    "name": "Eastmoney Search Sample",
+    "method": "GET",
+    "url": "https://searchapi.eastmoney.com/api/suggest/get?input=%E8%8B%B9%E6%9E%9C&type=14&count=5&token=D43BF722C8E33BDC906FB84D85E326E8"
+  },
+  {
+    "id": "bitget_ticker",
+    "name": "Bitget Ticker Sample",
+    "method": "GET",
+    "url": "https://api.bitget.com/api/v2/spot/market/tickers?symbol=BTCUSDT"
+  },
+  {
+    "id": "frankfurter_fx",
+    "name": "Frankfurter FX Sample",
+    "method": "GET",
+    "url": "https://api.frankfurter.app/latest?from=USD&to=CNY"
+  }
+]

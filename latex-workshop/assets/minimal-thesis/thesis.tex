@@ -1,0 +1,29 @@
+\documentclass[12pt,a4paper]{report}
+\input{thesis.preamble.tex}
+\addbibresource{bibliography/references.bib}
+
+\title{Project Title}
+\author{Author Name}
+\date{\today}
+
+\begin{document}
+\pagenumbering{gobble}
+\maketitle
+\clearpage
+
+\pagenumbering{roman}
+\input{preface/acknowledgements.tex}
+\input{preface/abstract.tex}
+\tableofcontents
+\clearpage
+
+\pagenumbering{arabic}
+\include{body/01_introduction}
+\include{body/02_literature_review}
+\include{body/03_methodology}
+\include{body/04_implementation}
+\include{body/05_evaluation}
+\include{body/06_conclusion}
+
+\printbibliography
+\end{document}

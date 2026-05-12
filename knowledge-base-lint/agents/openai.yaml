@@ -1,0 +1,4 @@
+interface:
+  display_name: "Knowledge Base Lint"
+  short_description: "Health-check and repair the personal knowledge base"
+  default_prompt: "Lint my knowledge base."

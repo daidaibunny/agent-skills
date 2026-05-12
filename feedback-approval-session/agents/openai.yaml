@@ -1,0 +1,4 @@
+interface:
+  display_name: "Feedback Approval Session"
+  short_description: "Review one feedback item, await approval."
+  default_prompt: "Review one open feedback item, ask one question, draft plan/patch/reply, and pause for explicit approval."

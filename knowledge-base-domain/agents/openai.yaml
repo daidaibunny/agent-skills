@@ -1,0 +1,4 @@
+interface:
+  display_name: "Knowledge Base Domain"
+  short_description: "Add, rename, merge, or remove a domain or scoped vault"
+  default_prompt: "Manage domains in my knowledge base."
