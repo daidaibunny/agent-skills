@@ -214,3 +214,16 @@ git push origin main
 
 Do not add unrelated uncommitted raw files, assets, or `.obsidian/` changes unless they
 belong to the current ingest.
+
+## Cross-Domain Synthesis Matrix
+
+After updating `concept.md` or `entity.md` with new or modified entries, update the
+synthesis status matrix in `wiki/wow-moment/index.md`:
+
+1. Read the matrix if `wiki/wow-moment/index.md` exists (it may not if the wow-moment
+   domain has not been created yet — skip this step in that case).
+2. In the `## Synthesis Status` table, set the affected domain's status to `pending` and
+   update the `Concepts Since` column to reflect what changed.
+3. If the affected domain does not yet have a row in the matrix, add one with status
+   `pending`.
+4. Include this change in the commit.

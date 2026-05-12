@@ -249,3 +249,15 @@ are in sync:
 
 - `~/.codex/skills/knowledge-base-*/SKILL.md` (global, read by Codex/OpenCode)
 - `wiki/knowledge-base/skills/knowledge-base-*/SKILL.md` (repository backup)
+
+## Cross-Domain Synthesis Matrix
+
+When creating, renaming, or removing a domain, update the synthesis status matrix in
+`wiki/wow-moment/index.md`:
+
+1. **Creating a domain**: Add a row for the new domain with status `pending`.
+2. **Removing a domain**: Remove the domain's row from the matrix. Check
+   `wiki/wow-moment/entity.md` for wow moments referencing the removed domain and present
+   them to the user for review before deletion.
+3. **Renaming a domain**: Update the domain name in the matrix row.
+4. Include these changes in the Step 7 commit.

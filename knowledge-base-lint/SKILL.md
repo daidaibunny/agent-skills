@@ -19,10 +19,16 @@ reference requests.
 - The user must explicitly ask for linting, a health check, audit, consistency review, or
   cleanup.
 - The user may scope lint to one domain, several domains, or the whole wiki.
-- Prefer concrete findings and proposed edits over long reports.
-- Do not edit `raw/`; only report raw-source issues or update wiki pages that reference
-  raw sources.
-- Do not modify wiki files until the user approves the specific finding.
+  - Prefer concrete findings and proposed edits over long reports.
+  - Do not edit `raw/`; only report raw-source issues or update wiki pages that reference
+    raw sources.
+  - Do not modify wiki files until the user approves the specific finding.
+- Two sub-scopes exist:
+  - **Freshness**: `lint freshness <domain>` or `lint freshness --all` for content
+    freshness checks.
+  - **Wow Moment Synthesis**: `lint wow-moment <domain>` or `lint wow-moment --all`
+    for cross-domain knowledge synthesis. This is delegated to the
+    `knowledge-base-wow-moment-synthesize` skill. Defaults to incremental mode.
 
 ## Lint Protocol
 
