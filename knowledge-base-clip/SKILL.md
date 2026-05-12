@@ -1,6 +1,6 @@
 ---
 name: knowledge-base-clip
-description: Clip content from a URL into the knowledge base through browser automation. Use when the user sends a URL (for example a WeChat Official Account article link) and asks to ingest, capture, clip, or save it — even if the user says "ingest" followed by a URL, the URL means this must be clipped first. Handles content extraction, image downloading, domain matching, approval gating, and automatic ingest after the content has been saved to raw/.
+description: Clip content from a URL into the knowledge base through browser automation. Use when the user sends a URL (for example a WeChat Official Account article link) and asks to clip, ingest, capture, or save it — even if the user says "ingest" followed by a URL, the URL means this must be clipped first. Also use when the user explicitly says "clip" followed by a URL. Handles content extraction, image downloading, domain matching, approval gating, and automatic ingest after the content has been saved to raw/.
 ---
 
 # Knowledge Base Clip
