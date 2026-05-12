@@ -73,6 +73,18 @@ handle these gracefully:
    - Preserve blockquotes
    - Strip non-content elements (advertisements, navigation, recommended articles,
      comment sections)
+4. **Image input capability check**: Before attempting to read or analyze images from
+   the article (for OCR, content extraction, or quality assessment), determine whether
+   the active model supports image input.
+   - If the model supports image input: optionally read key images (charts, diagrams,
+     screenshots of text) to improve content extraction quality.
+   - If the model does NOT support image input (for example DeepSeek): skip all
+     image-reading attempts. Simply extract image URLs from the page DOM or source and
+     proceed to Step 2 to download them. Do not call vision or image analysis tools —
+     they will fail with errors like `unknown variant image_url`.
+   - Regardless of image input support, all images must still be downloaded to
+     `raw/assets/` in Step 2. Image reading is an optional enhancement, not a
+     requirement.
 
 ### Step 2 — Image Download
 
