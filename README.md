@@ -33,4 +33,4 @@ user's request.
 
 ## Inventory
 
-57 skills across multiple categories. See each `SKILL.md` for details.
+59 skills across multiple categories. See each `SKILL.md` for details.
