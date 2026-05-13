@@ -166,6 +166,75 @@ to WeChat and generic walled-garden sources.
 
 ## Content Extraction
 
+### Anti-Detection Bootstrap (MANDATORY for Playwright sessions)
+
+Before any page navigation, inject anti-detection measures. Based on the browser
+fingerprinting techniques documented in `wiki/finance/chance/browser-fingerprinting-techniques.md`,
+the following vectors are what sites use to detect automated browsers:
+
+| Detection Vector | Default Playwright | Fix |
+|-----------------|-------------------|-----|
+| `navigator.webdriver` | `true` | Override to `undefined` via `addInitScript` |
+| User-Agent | `HeadlessChrome/...` | Set to real Chrome macOS UA |
+| `navigator.plugins` | 0 length | Add fake plugin array |
+| `navigator.languages` | `["en-US"]` | Set to `["zh-CN", "en-US"]` |
+| Screen resolution | Default | Set to common 1920×1080 |
+| `window.chrome` | Missing | Create fake `window.chrome` object |
+| Permissions API | Missing | Polyfill `navigator.permissions.query` |
+
+**Bootstrap script** — run this once per session via `page.evaluate` or `page.addInitScript`:
+
+```javascript
+// Anti-detection init — must run before any navigation
+await page.addInitScript(() => {
+  // 1. Hide webdriver flag
+  Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+  
+  // 2. Fake plugins array (firefox and chrome both have plugins)
+  Object.defineProperty(navigator, 'plugins', { 
+    get: () => [1, 2, 3, 4, 5] 
+  });
+  
+  // 3. Fake languages
+  Object.defineProperty(navigator, 'languages', { 
+    get: () => ['zh-CN', 'en-US'] 
+  });
+  
+  // 4. Fake window.chrome (Chromium-specific)
+  if (!window.chrome) {
+    window.chrome = { runtime: {} };
+  }
+  
+  // 5. Override permissions API
+  const originalQuery = window.navigator.permissions.query;
+  window.navigator.permissions.query = (params) => (
+    params.name === 'notifications' 
+      ? Promise.resolve({ state: Notification.permission })
+      : originalQuery(params)
+  );
+});
+```
+
+For platforms that also do canvas/WebGL fingerprinting, add:
+
+```javascript
+// Canvas fingerprint noise
+const originalGetImageData = CanvasRenderingContext2D.prototype.getImageData;
+CanvasRenderingContext2D.prototype.getImageData = function(...args) {
+  const result = originalGetImageData.apply(this, args);
+  // Add 1px noise to random channel
+  if (result.data.length > 0) {
+    result.data[Math.floor(Math.random() * result.data.length)] = 
+      (result.data[Math.floor(Math.random() * result.data.length)] + 1) % 256;
+  }
+  return result;
+};
+```
+
+Do NOT add canvas noise when the goal is to look like a real human user (for example
+browsing X/Twitter) — sites that DON'T have fingerprinting will show corrupted images.
+Only use when specifically targeting anti-fingerprinting sites.
+
 ### Primary: Playwright + Persistent Browser Profile
 
 The primary extraction method uses Playwright with a persistent browser profile, mirroring
