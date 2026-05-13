@@ -22,6 +22,31 @@ ordinary knowledge-base queries.
 - The assistant may write to `raw/` and `raw/assets/` during Research as an explicit
   exception. Outside Research, the normal raw/ write restriction applies.
 
+## Source Discovery Strategy (Priority Order)
+
+When searching for supplementary high-quality sources, follow this priority.
+Network accessibility data is maintained in the `knowledge-base-clip` skill
+(Network Capabilities Reference) and this project's `AGENTS.md` → Network Access.
+
+1. **Stack Exchange API** — `api.stackexchange.com/2.3/search?order=desc&sort=votes&intitle=<term>&site=stackoverflow`. Works without proxy. Use `webfetch` for direct question URLs (CAPTCHA-free). Do NOT use the web search page (triggers CAPTCHA).
+2. **Industry blogs** — Fingerprint.com, Cloudflare Blog, Mozilla Hacks, Google Security Blog. Direct HTTP, no proxy needed.
+3. **Official docs** — RFC, W3C, MDN, protocol specifications. Always accessible.
+4. **fxtwitter API** — `GET api.fxtwitter.com/<user>/status/<tweet-id>` for resolving X/Twitter tweet content and quoted tweets.
+5. **Playwright browser** — Reserve for X/Twitter (logged-in browsing) and WeChat (walled-garden). For X/Twitter: must use a persistent browser profile with login cookies. For all Playwright sessions: inject the Anti-Detection Bootstrap from the `knowledge-base-clip` skill before navigating.
+6. **Skip Reddit** — Blocked ("Please wait for verification"). Do not attempt.
+7. **Skip Google Search** — JS redirect loop. Do not attempt.
+8. **Do not use curl** — Prefer `webfetch` for HTTP content, Playwright for browser-required content.
+
+### Quality Filters
+
+Apply these filters to candidate sources before presenting to the user:
+
+- **Authority**: Named author or organization with domain track record.
+- **Recency**: Published or substantively updated within the last 2 years.
+- **Depth**: Original analysis, data, or synthesis — not surface aggregation.
+- **Relevance**: Directly addresses the research topic.
+- **Deduplicate**: Check against existing source summaries in the target scope before proposing.
+
 ## Research Protocol
 
 ### Step 1 — Confirm Domain and Scope

@@ -136,6 +136,41 @@ Open only what you need:
 - CLI command reference: `references/cli.md`
 - Practical workflows and troubleshooting: `references/workflows.md`
 
+## Anti-Detection & Stealth
+
+When browsing sites that may use browser fingerprinting to detect automation
+(for example X/Twitter, WeChat, or any site with anti-bot measures), configure Playwright
+for stealth before opening any page.
+
+### Configuration
+
+The repo includes a pre-configured stealth profile at `.playwright/cli.config.json`:
+
+```bash
+"$PWCLI" open <url> --config .playwright/cli.config.json
+```
+
+Key settings in this config:
+- `--disable-blink-features=AutomationControlled` — Hides the `navigator.webdriver` flag
+- Real Chrome macOS User-Agent (not `HeadlessChrome/...`)
+- 1920×1080 viewport, zh-CN locale, Asia/Shanghai timezone
+- Disabled GPU, infobars, dev-shm
+
+### Manual Additions for Browser-API Mode
+
+When using `page.addInitScript()` directly (MCP mode):
+
+```javascript
+await page.addInitScript(() => {
+  Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+  Object.defineProperty(navigator, 'plugins', { get: () => [1,2,3,4,5] });
+  Object.defineProperty(navigator, 'languages', { get: () => ['zh-CN','en-US'] });
+  window.chrome = window.chrome || { runtime: {} };
+});
+```
+
+Full anti-detection reference in `knowledge-base-clip` skill → Anti-Detection Bootstrap.
+
 ## Guardrails
 
 - Always snapshot before referencing element ids like `e12`.
