@@ -26,6 +26,59 @@ downloading, approval gating, and automatic ingest.
 - Treat `raw/` as the capture destination. Clip writes formatted markdown and downloaded
   images there, following the same conventions as manual user capture.
 
+## Network Capabilities Reference (Last Verified: 2026-05-13)
+
+This section records which external platforms are accessible from the current network
+environment and which require proxy or alternative approaches. Keep this updated when
+network conditions change.
+
+### Direct HTTP (webfetch) — No proxy required
+
+| Platform | Status | Notes |
+|----------|--------|-------|
+| Fingerprint.com | OK | Industry blog, no anti-bot |
+| EFF (coveryourtracks.eff.org) | OK | Research tool, open access |
+| fxtwitter API | OK via `webfetch` | Use `GET api.fxtwitter.com/<user>/status/<id>` |
+| vxtwitter API | OK via `webfetch` | Use `GET api.vxtwitter.com/<user>/status/<id>` |
+| StackOverflow (direct URL) | OK | Direct question URLs work; search page triggers CAPTCHA |
+| Stack Exchange API | OK | `GET api.stackexchange.com/2.3/search?...` — key discovery channel |
+
+### Proxy required (127.0.0.1:10808)
+
+| Platform | Status | Notes |
+|----------|--------|-------|
+| X/Twitter API (api.twitter.com) | OK with proxy | Bearer token + guest token authentication |
+| GitHub (git push/pull) | OK with proxy | Required for `git push` and `git pull` |
+| Twitter syndication (syndication.twitter.com) | OK with proxy | Alternative embed API |
+
+### Blocked (no known workaround)
+
+| Platform | Status | Notes |
+|----------|--------|-------|
+| Reddit | "Please wait for verification" | Anti-bot wall, even with Playwright |
+| StackOverflow Search | CAPTCHA (Human verification) | Use **Stack Exchange API** instead |
+| Google Search | JS redirect loop | Not accessible |
+| Jina Reader (r.jina.ai) | Transport error | Unreliable for walled-garden content |
+
+### Playwright Browser
+
+| Platform | Status | Notes |
+|----------|--------|-------|
+| X/Twitter | OK | Requires persistent browser profile with login cookies; no proxy needed for browsing |
+| WeChat Web (mp.weixin.qq.com) | OK | Requires persistent profile + QR code login |
+| StackOverflow | CAPTCHA | Triggers "Human verification" even with browser |
+
+### Research Strategy (Priority Order)
+
+For supplementary research (Step 8):
+
+1. **Stack Exchange API** — Discover relevant Q&As by topic, then fetch via direct URL.
+   Example: `GET api.stackexchange.com/2.3/search?order=desc&sort=votes&intitle=<term>&site=stackoverflow`
+2. **Industry blogs** — Fingerprint.com, Cloudflare Blog, Mozilla Hacks, etc. Direct HTTP works.
+3. **Official docs** — RFC, W3C, MDN. Always accessible.
+4. **Reddit** — Currently blocked. Skip unless user manually provides content.
+5. **Playwright** — Use only for X/Twitter or WeChat content extraction, not for general web browsing.
+
 ## Platform-Specific Rules
 
 ### X / Twitter Platform
