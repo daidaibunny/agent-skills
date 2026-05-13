@@ -26,17 +26,13 @@ downloading, approval gating, and automatic ingest.
 - Treat `raw/` as the capture destination. Clip writes formatted markdown and downloaded
   images there, following the same conventions as manual user capture.
 
-## Content Extraction Failure Handling
+## Content Extraction
 
-Content behind walled gardens (WeChat Official Account articles, X posts, paywalled
-sites) may be protected by CAPTCHA, login requirements, or anti-bot detection. The
-browser-capable agent must apply a tiered strategy rather than cycling through futile
-retries.
+### Primary: Playwright + Persistent Browser Profile
 
-### Tier 1 — Persistent Browser Profile (Primary)
-
-Maintain a persistent browser profile for each walled-garden platform on the Hermes
-server. The profile stores login cookies across sessions.
+The primary extraction method uses Playwright with a persistent browser profile, mirroring
+how Obsidian Web Clipper works: a logged-in browser opens the page, extracts the
+fully-rendered DOM, and converts the content to markdown in-browser.
 
 1. **Profile directory convention**:
    ```text
@@ -46,90 +42,127 @@ server. The profile stores login cookies across sessions.
 2. **Initial setup**: Open each platform URL once with the persistent profile, complete
    the login flow (WeChat: scan QR code with the WeChat app. X: enter credentials).
    Subsequent sessions reuse the stored cookies.
-3. **Cookie lifespan**: Be aware that platform cookies expire. WeChat web sessions
-   typically last hours to a day. X sessions vary. When cookies expire and CAPTCHA
-   reappears, fall through to Tier 3 — do not cycle retries.
+3. **Cookie maintenance**: The profile must be configured to persist cookies, local storage,
+   and session data across restarts. This is the mechanism that avoids triggering CAPTCHA.
+   When cookies expire and CAPTCHA reappears, do NOT cycle retries — fall through to the
+   alternative below.
 4. **Volume considerations**: This knowledge base is human-triggered (the user manually
-   sends URLs from their phone). The access pattern is low frequency (a few articles per
-   day), single-URL access, not bulk scraping. This pattern is unlikely to trigger
+   sends URLs from their phone). The access pattern is low frequency — a few articles per
+   day at most, single-URL access, not bulk scraping. This pattern is unlikely to trigger
    aggressive anti-bot countermeasures that would risk account suspension.
 
-### Tier 2 — Platform-Specific Alternatives
+After opening the page with the persistent profile:
 
-Before declaring failure, try one platform-appropriate alternative:
-
-| Platform | Alternative |
-|----------|-------------|
-| WeChat (mp.weixin.qq.com) | Sogou WeChat search (`weixin.sogou.com`) for cached copies |
-| X / Twitter | Nitter public instances (may also be rate-limited) |
-| General web | Standard HTTP fetch via `webfetch` if the page is publicly accessible |
-
-Try at most ONE alternative per URL. Do not cycle.
-
-### Tier 3 — Fast Failure (MANDATORY)
-
-If both Tier 1 (persistent profile) and Tier 2 (one alternative) fail:
-
-1. **Recognize CAPTCHA immediately** from the page URL or content. Key signatures:
-   - `mp.weixin.qq.com/mp/wappoc_appmsgcaptcha` (WeChat verification)
-   - Page title "环境异常" or "验证码" (WeChat environment check)
-   - Any login wall, Cloudflare challenge, or JavaScript challenge page.
-
-2. **Stop after at most 2 attempts total** (Tier 1 profile + one Tier 2 alternative).
-   Do NOT cycle through curl, Jina Reader, search engines, browser JavaScript injection,
-   or repeated browser interactions after the first failure.
-
-3. **Report to the user via the approval channel** with a clear message:
-
-   ```text
-   无法自动访问这篇文章。遇到了 [CAPTCHA 验证/登录墙]。
-   
-   替代方案：请将文章内容复制粘贴发送给我，或者手动在浏览器中完成验证后通知我重试。
-   ```
-
-4. **Adhere to the agent's configured tool loop guardrails.** Do not retry the
-   same URL with slight variations of the same approach.
-
-## Clip Protocol
-
-### Step 1 — DOM-Based Content Extraction
-
-The primary extraction method mirrors how Obsidian Web Clipper works: open the page
-in a browser that already has cookies (persistent profile), extract content from the
-fully-rendered DOM using JavaScript, and convert HTML to markdown in-browser. No external
-reader services (Jina, curl) are used in the primary path — the browser itself is the
-extraction engine.
-
-1. Open the URL with a persistent browser profile (see Tier 1 in Failure Handling).
-   The profile's existing cookies allow access to walled-garden content without triggering
-   CAPTCHA.
-2. Wait for the page to fully load (JavaScript-rendered content, lazy images).
-3. Inject JavaScript to extract the article content from the DOM:
+1. Wait for the page to fully render (JavaScript-loaded content, lazy images).
+2. Inject JavaScript to extract the article content from the DOM:
    - Identify the main content container using heuristics: `<article>`, `[role="main"]`,
      `.rich_media_content`, `.article-content`, or the largest text-dense element.
    - Extract: article title (`<h1>` or `og:title` meta), publication date, author name.
    - Strip non-content elements: navigation bars, sidebars, advertisements, comment
      sections, recommended articles, social sharing buttons.
-   - Collect all `<img>` URLs from the content area (skip tracking pixels, icons,
-     decorative images based on size and class names).
-4. Convert the extracted HTML content to well-formed markdown in the browser:
-   - Preserve heading hierarchy (`#`, `##`, `###`)
-   - Preserve links with original URLs
-   - Preserve lists (ordered and unordered)
-   - Preserve blockquotes
-   - Preserve inline formatting (bold, italic)
-5. Return the markdown text and the list of image URLs to the agent for further
-   processing.
+   - Collect all `<img>` URLs from the content area. Skip tracking pixels, icons, and
+     decorative images based on size and class names.
+3. Convert the extracted HTML content to well-formed markdown in the browser:
+   - Preserve heading hierarchy (`#`, `##`, `###`).
+   - Preserve links with original URLs.
+   - Preserve lists (ordered and unordered).
+   - Preserve blockquotes and inline formatting.
+4. **Detect truncated content**: After extraction, check whether the content appears
+   truncated — for example the article body is substantially shorter than expected, ends
+   with "登录后阅读全文" (log in to read the full article), "订阅继续阅读" (subscribe to continue),
+   or shows only a preview paragraph with a paywall/login prompt. If truncated content is
+   detected, record this in a `## Truncated Content Note` in the raw source file and flag
+   it for manual completion later.
+
+### Alternative: Jina Reader
+
+If the Playwright primary path fails (CAPTCHA despite persistent profile, cookie expiry,
+or browser unavailability), try Jina Reader as the sole alternative:
+
+```text
+https://r.jina.ai/<article-url>
+```
+
+Jina Reader converts accessible web pages to clean markdown with a single HTTP request.
+It is lightweight and fast for publicly accessible content, but will also fail on
+walled-garden pages that require login.
+
+Try Jina Reader exactly ONCE. Do not cycle between Playwright and Jina — if one fails,
+try the other once, then fast-fail. Do not use curl, search engines, or other approaches.
+
+### Fast Failure
+
+If BOTH primary (Playwright with persistent profile) and the single alternative
+(Jina Reader) fail:
+
+1. **Recognize failure signatures immediately**:
+   - `mp.weixin.qq.com/mp/wappoc_appmsgcaptcha` (WeChat CAPTCHA)
+   - Page title "环境异常" or "验证码" (WeChat environment check)
+   - Any login wall, Cloudflare challenge, or JavaScript challenge page
+   - Empty or near-empty content from Jina Reader
+2. **Stop after at most 2 attempts total** (primary + one alternative).
+3. **Report to the user via the approval channel**:
+   ```text
+   无法自动访问这篇文章。遇到了 [CAPTCHA 验证/登录墙]。
+   替代方案：请将文章内容复制粘贴发送给我，或者手动在浏览器中完成验证后通知我重试。
+   ```
+4. Adhere to the agent's configured tool loop guardrails. Do not retry the same URL
+   with slight variations.
+
+### Truncated Content Handling
+
+Some articles show only a partial preview before requiring login or subscription. After
+content extraction (whether successful via Playwright or Jina Reader), check for
+truncation signals:
+
+- Article body under ~500 characters when the original is clearly longer
+- Phrases like "登录后阅读全文", "订阅继续阅读", "扫码阅读全文", "阅读全文请点击"
+- "Sign in to continue reading", "Subscribe to read the full article"
+- A visible paywall or login prompt in the extracted content
+- Jina Reader returning substantially less content than the page visibly contains
+
+If truncated content is detected:
+
+1. Save whatever content WAS successfully extracted to `raw/<domain>/<title-slug>.md`.
+2. Add a `## Truncated Content Note` section at the top of the raw source file:
+   ```markdown
+   ## Truncated Content Note
+   
+   The full article requires login or subscription to access. Only the preview
+   content has been saved. Images that were accessible have been downloaded. The
+   complete article needs manual retrieval.
+   
+   Access requirement: [login / subscription / other]
+   ```
+3. Download any images that were accessible in the truncated portion.
+4. Continue with the standard Clip protocol (domain matching, approval, ingest).
+5. During the approval preview, inform the user: "注意：这篇文章仅提取了预览部分，完整内容需要登录/订阅后手动补充。"
+
+## Clip Protocol
+
+### Step 1 — Content Extraction
+
+Content extraction follows the two-tier strategy defined in the Content Extraction
+section above:
+
+1. **Primary**: Use Playwright with a persistent browser profile to open the URL,
+   extract content from the fully-rendered DOM, and convert to markdown in-browser.
+   This mirrors the Obsidian Web Clipper approach.
+2. **Alternative (exactly once)**: If primary fails (CAPTCHA, expired cookies), try
+   Jina Reader (`https://r.jina.ai/<article-url>`) as the sole fallback.
+3. **Fast-fail**: If both fail, report to the user and stop.
+4. **Truncation check**: After extraction, verify the content is complete. If truncated,
+   record a `## Truncated Content Note` in the raw source file.
+5. Do not rely on user-provided metadata. Extract everything from the article itself.
 6. **Image input capability check**: Before attempting to read or analyze images from
-   the article (for OCR, content extraction, or quality assessment), determine whether
-   the active model supports image input.
+   the article (for OCR or content extraction), determine whether the active model
+   supports image input.
    - If the model supports image input: optionally read key images to improve extraction
      quality.
    - If the model does NOT support image input (for example DeepSeek): skip all
-     image-reading attempts. Simply use the extracted image URLs and proceed to Step 2.
+     image-reading attempts.
    - Regardless of image input support, all content images must be downloaded to
-     `raw/assets/` in Step 2. Image reading is an optional enhancement, not a
-     requirement.
+     `raw/assets/` in Step 2.
 
 ### Step 2 — Image Download
 
