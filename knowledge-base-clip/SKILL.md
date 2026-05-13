@@ -62,7 +62,7 @@ Before declaring failure, try one platform-appropriate alternative:
 |----------|-------------|
 | WeChat (mp.weixin.qq.com) | Sogou WeChat search (`weixin.sogou.com`) for cached copies |
 | X / Twitter | Nitter public instances (may also be rate-limited) |
-| General web | Standard HTTP fetch via `webfetch` or Jina Reader (`r.jina.ai`) |
+| General web | Standard HTTP fetch via `webfetch` if the page is publicly accessible |
 
 Try at most ONE alternative per URL. Do not cycle.
 
@@ -92,32 +92,42 @@ If both Tier 1 (persistent profile) and Tier 2 (one alternative) fail:
 
 ## Clip Protocol
 
-### Step 1 — Content Extraction
+### Step 1 — DOM-Based Content Extraction
 
-1. A browser-capable agent opens the URL and extracts:
-   - Article title
-   - Full article body text
-   - Author name (if available in the article)
-   - Publication date (if available in the article)
-   - All image URLs referenced in the article content
-2. Do not rely on user-provided metadata. Extract everything from the article itself.
-3. Convert the article body to well-formed markdown:
+The primary extraction method mirrors how Obsidian Web Clipper works: open the page
+in a browser that already has cookies (persistent profile), extract content from the
+fully-rendered DOM using JavaScript, and convert HTML to markdown in-browser. No external
+reader services (Jina, curl) are used in the primary path — the browser itself is the
+extraction engine.
+
+1. Open the URL with a persistent browser profile (see Tier 1 in Failure Handling).
+   The profile's existing cookies allow access to walled-garden content without triggering
+   CAPTCHA.
+2. Wait for the page to fully load (JavaScript-rendered content, lazy images).
+3. Inject JavaScript to extract the article content from the DOM:
+   - Identify the main content container using heuristics: `<article>`, `[role="main"]`,
+     `.rich_media_content`, `.article-content`, or the largest text-dense element.
+   - Extract: article title (`<h1>` or `og:title` meta), publication date, author name.
+   - Strip non-content elements: navigation bars, sidebars, advertisements, comment
+     sections, recommended articles, social sharing buttons.
+   - Collect all `<img>` URLs from the content area (skip tracking pixels, icons,
+     decorative images based on size and class names).
+4. Convert the extracted HTML content to well-formed markdown in the browser:
    - Preserve heading hierarchy (`#`, `##`, `###`)
    - Preserve links with original URLs
    - Preserve lists (ordered and unordered)
    - Preserve blockquotes
-   - Strip non-content elements (advertisements, navigation, recommended articles,
-     comment sections)
-4. **Image input capability check**: Before attempting to read or analyze images from
+   - Preserve inline formatting (bold, italic)
+5. Return the markdown text and the list of image URLs to the agent for further
+   processing.
+6. **Image input capability check**: Before attempting to read or analyze images from
    the article (for OCR, content extraction, or quality assessment), determine whether
    the active model supports image input.
-   - If the model supports image input: optionally read key images (charts, diagrams,
-     screenshots of text) to improve content extraction quality.
+   - If the model supports image input: optionally read key images to improve extraction
+     quality.
    - If the model does NOT support image input (for example DeepSeek): skip all
-     image-reading attempts. Simply extract image URLs from the page DOM or source and
-     proceed to Step 2 to download them. Do not call vision or image analysis tools —
-     they will fail with errors like `unknown variant image_url`.
-   - Regardless of image input support, all images must still be downloaded to
+     image-reading attempts. Simply use the extracted image URLs and proceed to Step 2.
+   - Regardless of image input support, all content images must be downloaded to
      `raw/assets/` in Step 2. Image reading is an optional enhancement, not a
      requirement.
 
