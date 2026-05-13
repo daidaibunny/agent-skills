@@ -205,6 +205,19 @@ older log entries.
 
 ## Git
 
+**Before any commit, verify the repository state:**
+
+```bash
+branch=$(git branch --show-current)
+if [ "$branch" != "main" ]; then
+  echo "ERROR: not on main branch (current: $branch). Aborting."
+  exit 1
+fi
+if [ -n "$(git status --porcelain)" ] && ! git diff --quiet; then
+  # Uncommitted changes exist — review before proceeding
+fi
+```
+
 ```bash
 git status --short --branch
 git add <raw-source> <referenced-raw-assets> <wiki-files>

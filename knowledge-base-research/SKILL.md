@@ -217,6 +217,16 @@ Each domain index `## Sources` section uses this table:
 
 ## Git
 
+**Before any commit, verify the repository state:**
+
+```bash
+branch=$(git branch --show-current)
+if [ "$branch" != "main" ]; then
+  echo "ERROR: not on main branch (current: $branch). Aborting."
+  exit 1
+fi
+```
+
 ```bash
 # After Step 4 (raw sources only):
 git add raw/<domain>/<title-slug>.md raw/assets/<source-slug>-*

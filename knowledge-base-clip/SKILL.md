@@ -346,6 +346,16 @@ wiki/log.md                            (clip entry)
 
 ## Git
 
+**Before any commit, verify the repository state:**
+
+```bash
+branch=$(git branch --show-current)
+if [ "$branch" != "main" ]; then
+  echo "ERROR: not on main branch (current: $branch). Aborting."
+  exit 1
+fi
+```
+
 After Step 3 (raw source and assets only):
 
 ```bash

@@ -204,6 +204,16 @@ Insert the new entry immediately after `# Log`.
 
 ### Step 7 — Commit and Push
 
+**Before any commit, verify the repository state:**
+
+```bash
+branch=$(git branch --show-current)
+if [ "$branch" != "main" ]; then
+  echo "ERROR: not on main branch (current: $branch). Aborting."
+  exit 1
+fi
+```
+
 ```bash
 git add raw/<domain>/ wiki/<domain>/ AGENTS.md wiki/index.md wiki/log.md
 git commit -m "maintenance: <action> domain <name>"
