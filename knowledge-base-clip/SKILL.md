@@ -26,6 +26,91 @@ downloading, approval gating, and automatic ingest.
 - Treat `raw/` as the capture destination. Clip writes formatted markdown and downloaded
   images there, following the same conventions as manual user capture.
 
+## Platform-Specific Rules
+
+### X / Twitter Platform
+
+X platform tweets and threads require special handling because the author frequently
+posts extended content ("pages") as replies to their own tweet, and high-value insights
+also appear in non-author replies.
+
+**Reply collection rule**: Always collect TWO categories of replies:
+
+1. **Author's own replies**: The original author's replies in the thread. These often
+   contain the author's numbered "pages" (1/n, 2/n, ...) that extend the main tweet
+   into a full essay. These are the PRIMARY capture target.
+2. **Highest-engagement non-author replies**: Identify the top 2-3 replies from other
+   users with the most likes/retweets. These may contain valuable counterpoints,
+   expansions, or practical applications of the original ideas.
+
+**Critical rules for X extraction**:
+
+- **ONE unified raw source**: Produce exactly ONE `.md` file per clip session. Never
+  create separate files for individual replies. Combine the main tweet, author replies,
+  and top non-author replies into a single well-structured document.
+- **Expand replies first**: X requires clicking "Show replies" / "查看回复" to load
+  the reply thread. Use Playwright to scroll through the page incrementally (X uses
+  virtual scrolling — content outside the viewport is removed from DOM). Collect
+  articles incrementally as you scroll.
+- **Login required for replies**: X blocks unauthenticated access to reply threads.
+  Ensure the browser profile has valid login cookies before extracting. If not logged
+  in, ask the user to log in first.
+- **Use fxtwitter API as supplement**: When quoted tweet content is truncated in the
+  browser (X collapses long quoted tweets with "Show more"), use the fxtwitter API
+  (`https://api.fxtwitter.com/<user>/status/<tweet-id>`) to retrieve the full tweet
+  text including the complete quoted tweet body. This is the definitive way to resolve
+  truncations.
+- **Fix bare URLs**: After extraction, ensure all URLs are wrapped in markdown link
+  syntax (`[text](url)`). Plain URLs adjacent to Chinese parentheses `（）` will cause
+  the closing `）` to be incorrectly included as part of the URL when clicked.
+- **Structure the output**:
+  ```markdown
+  # Title
+  **来源**: [X / @author](url)
+  **作者**: author info
+  **日期**: date info
+
+  ## 主帖
+  (main tweet content)
+
+  ## 作者回复（作者扩展页）
+  **Reply 1 (1/n)** — topic
+  > quoted content
+
+  **Reply 2 (2/n)** — topic
+  > quoted content
+
+  ## 高价值回复（非作者）
+  **@user1** (NN likes)
+  > reply content
+
+  **@user2** (NN likes)
+  > reply content
+  ```
+
+**Extraction workflow for X**:
+
+1. Navigate to the tweet URL with logged-in Playwright browser.
+2. Wait for page render (3 seconds).
+3. Close any login/signup dialogs (press Escape).
+4. Scroll through the entire page in 2000px increments, at each step:
+   - Click any "Show replies" / "查看回复" / "显示更多" buttons.
+   - Wait for content to load (800ms).
+   - Collect any author-tweet `article` elements not previously seen.
+5. Collect ALL author tweets (check for `@handle` and display name in User-Name element).
+6. For author replies that contain quoted tweets with truncated content (ends with
+   "显示更多", "2." without following text, or bare "…"), resolve via fxtwitter API.
+7. Identify top 2-3 non-author replies by engagement count.
+8. Extract their full text (including any quoted content).
+9. Format everything into the unified markdown structure above.
+10. Submit for user domain confirmation, then follow standard Clip Protocol Step 3+.
+
+### WeChat Official Account
+
+WeChat Official Account articles (mp.weixin.qq.com) are the original primary target of
+this skill. See Content Extraction below for the general Playwright workflow that applies
+to WeChat and generic walled-garden sources.
+
 ## Content Extraction
 
 ### Primary: Playwright + Persistent Browser Profile
@@ -278,6 +363,60 @@ After completion, report back to the user via WeChat (through Hermes agent):
 - Summary page path as an Obsidian link
 - Concepts added (if any)
 - Entities added (if any)
+
+### Step 8 — Research Extension (Context-Aware)
+
+After the clip and ingest are complete, proactively evaluate whether the topic benefits
+from supplementary high-quality sources. This step is NOT mandatory for every clip —
+apply it when the clipped content covers a technical, academic, or professionally deep
+topic where external references would add significant value.
+
+**When to trigger Research Extension**:
+
+- The clipped content covers a technical topic (e.g., browser fingerprinting, protocol
+  design, cryptographic methods, software architecture).
+- The content contains claims that would benefit from external validation or counterpoint.
+- The topic has a rich body of high-quality material on StackOverflow, Reddit
+  (r/programming, r/netsec, r/crypto, etc.), official documentation, or authoritative
+  engineering blogs.
+- The user explicitly requests deeper coverage.
+
+**Research sources (quality-ordered)**:
+
+1. Official documentation and specifications (RFC, W3C, IEEE, protocol specs).
+2. StackOverflow highly-upvoted answers (score ≥ 50).
+3. Reddit r/programming, r/netsec, r/crypto, r/MachineLearning — top-voted posts and
+   comments with technical depth.
+4. Authoritative engineering blogs (Cloudflare, Mozilla Hacks, Google Security Blog, etc.).
+5. Academic papers (via arxiv.org or Google Scholar) when the topic warrants it.
+
+**Research output**:
+
+1. If highly relevant, substantive content is found, create an additional raw source at
+   `raw/<domain>/<scope>/<topic-slug>-research-supplement.md` (or in the parent domain
+   if no scope applies).
+2. The research supplement must clearly distinguish:
+   - The original clipped content source
+   - Each external source with its URL and a one-sentence quality justification
+   - Synthesized insights that bridge the original content and external findings
+3. Run the standard Ingest protocol on the research supplement as a separate source
+   summary `<topic-slug>-research-supplement_summary.md`.
+4. In the research supplement's source summary, cross-reference the original clipped
+   source summary.
+5. Update the domain `concept.md` and `entity.md` with any new concepts or entities
+   discovered through research.
+6. If the research uncovers content that belongs to a different domain, propose
+   creating a separate source in that domain to avoid scope confusion.
+
+**Research Extension commit**:
+
+```bash
+git add raw/<domain>/<scope>/<topic-slug>-research-supplement.md wiki/<domain>/<scope>/<topic-slug>-research-supplement_summary.md
+git commit -m "research: supplementary sources for <original-topic>"
+git push origin main
+```
+
+Use `research` as the log type for research extension entries in `wiki/log.md`.
 
 ## Path Variables
 
