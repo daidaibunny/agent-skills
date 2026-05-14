@@ -528,6 +528,95 @@ def push_digest(items: List[dict], rules: dict, state: dict) -> bool:
 
 
 # ---------------------------------------------------------------------------
+# Archive
+# ---------------------------------------------------------------------------
+
+
+def archive_items(items: list, kb_path: Path, state: dict) -> None:
+    """Write daily digest markdown and queue high-score items for ingest."""
+    date_str = today_str()
+    digest_dir = kb_path / "raw" / "daily-digest"
+    digest_dir.mkdir(parents=True, exist_ok=True)
+
+    # Daily digest markdown
+    scored_items = [it for it in items if it.get("score", 0) >= 6]
+    if scored_items:
+        scored_items.sort(key=lambda x: -x.get("score", 0))
+        lines = [
+            f"# Daily Digest — {date_str}",
+            "",
+            f"**{len(scored_items)} items** scored ≥ 6 out of {len(items)} fetched.",
+            "",
+            "| # | Score | Domain | Title | Source |",
+            "|---|-------|--------|-------|--------|",
+        ]
+        for i, it in enumerate(scored_items, 1):
+            title = it.get("title", "")[:60]
+            url = it.get("url", "")
+            title_link = f"[{title}]({url})" if url else title
+            lines.append(
+                f"| {i} | **{it['score']}** | {it.get('target_domain', '')} | "
+                f"{title_link} | {it.get('source_name', '')} |"
+            )
+        lines.append("")
+        lines.append(f"*Generated: {now_iso()}*")
+        (digest_dir / f"{date_str}.md").write_text("\n".join(lines))
+
+    # Queue high-score items (≥8) for auto-ingest — save raw files + manifest
+    ingest_candidates = [it for it in items if it.get("score", 0) >= 8]
+    if ingest_candidates:
+        manifest_path = digest_dir / "ingest-manifest.json"
+        manifest = []
+        if manifest_path.exists():
+            try:
+                manifest = json.loads(manifest_path.read_text())
+            except Exception:
+                pass
+
+        for it in ingest_candidates:
+            domain = it.get("target_domain", "unknown")
+            raw_dir = kb_path / "raw" / domain
+            raw_dir.mkdir(parents=True, exist_ok=True)
+
+            # Clean title for filename
+            safe_title = re.sub(r"[^\w\s-]", "", it.get("title", "untitled"))[
+                :50
+            ].strip()
+            safe_title = re.sub(r"[-\s]+", "-", safe_title).strip("-") or "untitled"
+            slug = safe_title.lower()[:60]
+
+            # Avoid overwriting existing files
+            raw_path = raw_dir / f"{slug}.md"
+            if not raw_path.exists():
+                raw_content = (
+                    f"# {it.get('title', 'Untitled')}\n\n"
+                    f"**Source**: {it.get('source_name', '')}\n"
+                    f"**URL**: {it.get('url', '')}\n"
+                    f"**Score**: {it['score']}/10\n"
+                    f"**Date**: {date_str}\n\n"
+                    f"**Why**: {it.get('reason', '')}\n\n"
+                    f"## Summary\n\n"
+                    f"{it.get('summary', 'No summary available.')}\n"
+                )
+                raw_path.write_text(raw_content)
+
+            manifest.append(
+                {
+                    "raw_path": str(raw_path),
+                    "domain": domain,
+                    "title": it.get("title", ""),
+                    "url": it.get("url", ""),
+                    "score": it.get("score", 0),
+                    "reason": it.get("reason", ""),
+                    "source_name": it.get("source_name", ""),
+                    "queued_at": now_iso(),
+                }
+            )
+
+        manifest_path.write_text(json.dumps(manifest, indent=2, ensure_ascii=False))
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
@@ -596,6 +685,10 @@ def main() -> str:
     n_dg = 0
     if is_digest:
         n_dg = 1 if push_digest(all_items, rules, state) else 0
+
+    # Archive daily digest + queue high-score for ingest
+    if all_items and (is_digest or any(it.get("score", 0) >= 8 for it in all_items)):
+        archive_items(all_items, KB_PATH, state)
 
     # Cleanup old seen items
     cutoff = datetime.now(TZ_UTC8) - timedelta(
