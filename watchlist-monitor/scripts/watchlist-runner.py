@@ -8,7 +8,7 @@ pushes via Feishu Bot. Session-stealth defaults: ETag, rotating UA pool, delays.
 
 from __future__ import annotations
 
-import hashlib, json, os, re, signal, sys, time, uuid
+import hashlib, json, os, re, signal, subprocess, sys, time, uuid
 import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -286,6 +286,60 @@ def fetch_wallstreetcn(source: dict, state: dict) -> List[dict]:
 
     if next_cursor:
         src_st["cursor"] = next_cursor
+
+    return items
+
+
+def fetch_x_scrape(source: dict, state: dict, scripts_dir: Path) -> List[dict]:
+    """Fetch recent tweets from X accounts via Playwright subprocess."""
+    items = []
+    sid = source["id"]
+    accounts = source.get("accounts", [])
+    fcfg = source.get("filter", {})
+    max_per = fcfg.get("max_items_per_account", 5)
+
+    if not accounts:
+        return items
+
+    scraper_js = scripts_dir / "x_scraper.js"
+    if not scraper_js.exists():
+        return items
+
+    node_bin = os.path.expanduser("~/.hermes/node/bin/node")
+    if not os.path.exists(node_bin):
+        node_bin = "node"  # fallback to PATH
+
+    try:
+        result = subprocess.run(
+            [node_bin, str(scraper_js)] + accounts,
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+        data = json.loads(result.stdout.strip() or "[]")
+    except Exception:
+        return items
+
+    seen = state.setdefault("seen_items", {})
+
+    for tw in data:
+        if len(items) >= max_per * len(accounts):
+            break
+        tweet_id = tw.get("url", "").split("/")[-1] if tw.get("url") else ""
+        key = f"x://{tweet_id}"
+        if key in seen or not tweet_id:
+            continue
+        items.append(
+            {
+                "id": key,
+                "title": tw.get("text", "")[:80],
+                "url": tw.get("url", ""),
+                "summary": tw.get("text", "")[:400],
+                "source_name": f"X/{tw.get('account', '')}",
+                "source_type": "x_scrape",
+            }
+        )
+        seen[key] = now_iso()
 
     return items
 
@@ -663,6 +717,8 @@ def main() -> str:
                 items = fetch_rss(src, state)
             elif stype == "wallstreetcn":
                 items = fetch_wallstreetcn(src, state)
+            elif stype == "x_scrape":
+                items = fetch_x_scrape(src, state, Path(__file__).parent)
             else:
                 items = []
         except Exception as e:
