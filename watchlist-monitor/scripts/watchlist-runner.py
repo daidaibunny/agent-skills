@@ -293,7 +293,7 @@ def score_items(items: List[dict], target_domain: str, rules: dict) -> None:
         return
 
     scored = 0
-    _MAX_SCORE = 40  # max items to score per cycle (stay within 180s deadline)
+    _MAX_SCORE = 15  # max items to score per cycle (stay within 180s deadline)
 
     for item in items:
         if scored >= _MAX_SCORE:
@@ -308,21 +308,27 @@ def score_items(items: List[dict], target_domain: str, rules: dict) -> None:
         for p in chain:
             key_env = p.get("api_key_env", "")
             api_key = os.getenv(key_env, "")
-            if not api_key:
+            fb_env = p.get("api_key_fallback_env", "")
+            api_key_fb = os.getenv(fb_env, "") if fb_env else ""
+            keys = [k for k in [api_key, api_key_fb] if k]
+
+            if not keys:
                 continue
-            try:
-                if p["provider"] == "google_ai_studio":
-                    sco, reason = _score_google(prompt, p, api_key)
-                else:
-                    sco, reason = _score_openrouter(prompt, p, api_key)
-                if sco > 0:
-                    item["score"] = sco
-                    item["reason"] = reason
-                    break
-            except Exception:
-                continue
+            for cur_key in keys:
+                try:
+                    if p["provider"] == "google_ai_studio":
+                        sco, reason = _score_google(prompt, p, cur_key)
+                    else:
+                        sco, reason = _score_openrouter(prompt, p, cur_key)
+                    if sco > 0:
+                        item["score"] = sco
+                        item["reason"] = reason
+                        break
+                except Exception:
+                    continue
+            if item.get("score", 0) > 0:
+                break
         item.setdefault("score", 0)
-        item.setdefault("reason", "")
 
 
 def _score_google(prompt: str, p: dict, api_key: str) -> Tuple[int, str]:
