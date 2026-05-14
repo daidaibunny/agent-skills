@@ -27,7 +27,7 @@ TZ_UTC8 = timezone(timedelta(hours=8))
 SILENT = "[SILENT]"
 
 # Global timeout: script must finish within this window
-_DEADLINE_SEC = 50  # cron runs every 5 min, leave margin
+_DEADLINE_SEC = 180  # cron runs every 5 min, first run with no state may need time
 
 _UA_POOL = [
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
@@ -212,6 +212,74 @@ def fetch_rss(source: dict, state: dict) -> List[dict]:
     return items
 
 
+def fetch_wallstreetcn(source: dict, state: dict) -> List[dict]:
+    """Fetch 华尔街见闻 7x24 flash news via REST API (no auth)."""
+    items = []
+    sid = source["id"]
+    ep = source["endpoint"]
+    params = source.get("params", {})
+    fcfg = source.get("filter", {})
+    max_n = fcfg.get("max_items_per_cycle", 30)
+
+    src_st = state.setdefault("sources", {}).setdefault(sid, {})
+    cursor = src_st.get("cursor")
+
+    qs = "&".join([f"{k}={v}" for k, v in params.items()])
+    url = f"{ep}?{qs}"
+    if cursor:
+        url += f"&cursor={cursor}"
+    else:
+        url += "&first_page=true"
+
+    st, body, _ = http_get(url)
+    if st != 200:
+        return items
+
+    try:
+        data = json.loads(body)
+    except Exception:
+        return items
+
+    if data.get("code") != 20000:
+        return items
+
+    seen = state.setdefault("seen_items", {})
+    live_items = data.get("data", {}).get("items", [])
+    next_cursor = data.get("data", {}).get("next_cursor", "")
+
+    n = 0
+    for li in live_items:
+        if n >= max_n:
+            break
+        live_id = str(li.get("id", ""))
+        key = f"wscn://{live_id}"
+        if key in seen:
+            continue
+        content = li.get("content_text", "")[:400]
+        title = li.get("title", "") or content[:80]
+        uri = li.get("uri", "")
+        if uri and not uri.startswith("http"):
+            uri = f"https://wallstreetcn.com/livenews/{live_id}"
+
+        items.append(
+            {
+                "id": key,
+                "title": title,
+                "url": uri,
+                "summary": content,
+                "source_name": "华尔街见闻·7x24",
+                "source_type": "wallstreetcn",
+            }
+        )
+        seen[key] = now_iso()
+        n += 1
+
+    if next_cursor:
+        src_st["cursor"] = next_cursor
+
+    return items
+
+
 # ---------------------------------------------------------------------------
 # Scoring
 # ---------------------------------------------------------------------------
@@ -224,7 +292,13 @@ def score_items(items: List[dict], target_domain: str, rules: dict) -> None:
     if not chain:
         return
 
+    scored = 0
+    _MAX_SCORE = 40  # max items to score per cycle (stay within 180s deadline)
+
     for item in items:
+        if scored >= _MAX_SCORE:
+            break
+        scored += 1
         prompt = tpl.replace("{domain}", target_domain)
         prompt = prompt.replace("{title}", item.get("title", ""))
         prompt = prompt.replace("{source_name}", item.get("source_name", ""))
@@ -471,6 +545,8 @@ def main() -> str:
                 items = fetch_hn(src, state)
             elif stype == "rss":
                 items = fetch_rss(src, state)
+            elif stype == "wallstreetcn":
+                items = fetch_wallstreetcn(src, state)
             else:
                 items = []
         except Exception as e:
@@ -499,7 +575,16 @@ def main() -> str:
         hours=rules.get("push", {}).get("deduplication", {}).get("seen_ttl_hours", 168)
     )
     seen = state.get("seen_items", {})
-    stale = [k for k, v in seen.items() if datetime.fromisoformat(v[:19]) < cutoff]
+    stale = []
+    for k, v in seen.items():
+        try:
+            ts = datetime.fromisoformat(v[:19])
+            if ts.tzinfo is None:
+                ts = ts.replace(tzinfo=TZ_UTC8)
+            if ts < cutoff:
+                stale.append(k)
+        except Exception:
+            pass
     for k in stale:
         del seen[k]
 
