@@ -1,0 +1,515 @@
+#!/usr/bin/env python3
+"""
+Watchlist Runner v2 — no_agent cron script for Hermes.
+
+Reads raw/watchlist/rules.yaml, fetches new content, scores via provider chain,
+pushes via Feishu Bot. Session-stealth defaults: ETag, rotating UA pool, delays.
+"""
+
+from __future__ import annotations
+
+import hashlib, json, os, re, signal, sys, time, uuid
+import xml.etree.ElementTree as ET
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
+
+import feedparser, requests, yaml
+
+# ---------------------------------------------------------------------------
+# Constants
+# ---------------------------------------------------------------------------
+
+KB_PATH = Path(os.path.expanduser("~/knowledge-base"))
+RULES_PATH = KB_PATH / "raw" / "watchlist" / "rules.yaml"
+STATE_PATH = Path(os.path.expanduser("~/.hermes/cron/output/watchlist_state.json"))
+TZ_UTC8 = timezone(timedelta(hours=8))
+SILENT = "[SILENT]"
+
+# Global timeout: script must finish within this window
+_DEADLINE_SEC = 50  # cron runs every 5 min, leave margin
+
+_UA_POOL = [
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:133.0) Gecko/20100101 Firefox/133.0",
+]
+_REQ_TIMEOUT = 12
+
+
+def now_iso() -> str:
+    return datetime.now(TZ_UTC8).isoformat()
+
+
+def today_str() -> str:
+    return datetime.now(TZ_UTC8).strftime("%Y-%m-%d")
+
+
+# ---------------------------------------------------------------------------
+# State
+# ---------------------------------------------------------------------------
+
+
+def load_state() -> dict:
+    if STATE_PATH.exists():
+        try:
+            s = json.loads(STATE_PATH.read_text())
+            s.setdefault("sources", {})
+            s.setdefault("seen_items", {})
+            s.setdefault("push_log", {})
+            return s
+        except Exception:
+            pass
+    return {"version": 1, "sources": {}, "seen_items": {}, "push_log": {}}
+
+
+def save_state(state: dict) -> None:
+    STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    STATE_PATH.write_text(json.dumps(state, indent=2, ensure_ascii=False))
+
+
+# ---------------------------------------------------------------------------
+# HTTP
+# ---------------------------------------------------------------------------
+
+
+def http_get(url: str, etag: str | None = None) -> Tuple[int, str, str | None]:
+    ua = _UA_POOL[hash(url) % len(_UA_POOL)]  # stable per-url UA
+    h = {"User-Agent": ua, "Accept": "text/html,application/xml;q=0.9,*/*;q=0.8"}
+    if etag:
+        h["If-None-Match"] = etag
+    try:
+        r = requests.get(url, headers=h, timeout=_REQ_TIMEOUT)
+        new_etag = r.headers.get("ETag", "").strip('"') or None
+        return r.status_code, r.text, new_etag
+    except Exception:
+        return 0, "", None
+
+
+def http_post(url: str, payload: dict, api_key: str = "") -> Tuple[int, str]:
+    h = {"User-Agent": _UA_POOL[0], "Content-Type": "application/json"}
+    if api_key:
+        h["Authorization"] = f"Bearer {api_key}"
+    try:
+        r = requests.post(url, json=payload, headers=h, timeout=15)
+        return r.status_code, r.text
+    except Exception:
+        return 0, ""
+
+
+# ---------------------------------------------------------------------------
+# Fetch
+# ---------------------------------------------------------------------------
+
+
+def fetch_hn(source: dict, state: dict) -> List[dict]:
+    items = []
+    fcfg = source.get("filter", {})
+    keywords = [k.lower() for k in fcfg.get("keywords", [])]
+    min_score = fcfg.get("min_score", 10)
+    max_n = fcfg.get("max_items_per_cycle", 20)
+    ep = source["endpoint"]
+
+    st, body, _ = http_get(f"{ep}/v0/topstories.json")
+    if st != 200:
+        return items
+    try:
+        ids = json.loads(body)[:100]
+    except Exception:
+        return items
+
+    seen = state.setdefault("seen_items", {})
+    n = 0
+    for sid in ids:
+        if n >= max_n:
+            break
+        key = f"hn://{sid}"
+        if key in seen:
+            continue
+        st, body, _ = http_get(f"{ep}/v0/item/{sid}.json")
+        if st != 200:
+            continue
+        try:
+            obj = json.loads(body)
+        except Exception:
+            continue
+        title_l = (obj.get("title") or "").lower()
+        sco = obj.get("score", 0)
+        if sco < min_score:
+            continue
+        if keywords and not any(k in title_l for k in keywords):
+            continue
+        url = obj.get("url") or f"https://news.ycombinator.com/item?id={sid}"
+        items.append(
+            {
+                "id": key,
+                "title": obj.get("title", ""),
+                "url": url,
+                "summary": (obj.get("text") or "")[:400],
+                "source_name": "Hacker News",
+                "source_type": "hackernews",
+            }
+        )
+        seen[key] = now_iso()
+        n += 1
+    return items
+
+
+def fetch_rss(source: dict, state: dict) -> List[dict]:
+    items = []
+    sid = source["id"]
+    fcfg = source.get("filter", {})
+    keywords = [k.lower() for k in fcfg.get("keywords", [])]
+    max_n = fcfg.get("max_items_per_cycle", 20)
+
+    urls = source.get("urls", [source.get("url", "")])
+    if isinstance(urls, str):
+        urls = [urls]
+    urls = [u for u in urls if u]
+
+    src_st = state.setdefault("sources", {}).setdefault(sid, {})
+    etag = src_st.get("etag")
+    seen = state.setdefault("seen_items", {})
+
+    for url in urls:
+        st, body, new_etag = http_get(url, etag=etag)
+        if st == 304:
+            if new_etag:
+                src_st["etag"] = new_etag
+            continue
+        if st != 200:
+            continue
+        if new_etag:
+            src_st["etag"] = new_etag
+
+        feed = feedparser.parse(body)
+        n = 0
+        for e in feed.entries:
+            if n >= max_n:
+                break
+            title_l = (e.get("title") or "").lower()
+            link = e.get("link", "")
+            key = f"rss://{hashlib.md5(link.encode()).hexdigest()[:12]}"
+            if key in seen:
+                continue
+            if keywords and not any(k in title_l for k in keywords):
+                continue
+            summ = re.sub(r"<[^>]+>", "", e.get("summary", e.get("description", "")))[
+                :400
+            ]
+            items.append(
+                {
+                    "id": key,
+                    "title": e.get("title", ""),
+                    "url": link,
+                    "summary": summ,
+                    "source_name": source.get("description", sid),
+                    "source_type": "rss",
+                }
+            )
+            seen[key] = now_iso()
+            n += 1
+    return items
+
+
+# ---------------------------------------------------------------------------
+# Scoring
+# ---------------------------------------------------------------------------
+
+
+def score_items(items: List[dict], target_domain: str, rules: dict) -> None:
+    scfg = rules.get("scoring", {})
+    chain = scfg.get("provider_chain", [])
+    tpl = scfg.get("prompt", "")
+    if not chain:
+        return
+
+    for item in items:
+        prompt = tpl.replace("{domain}", target_domain)
+        prompt = prompt.replace("{title}", item.get("title", ""))
+        prompt = prompt.replace("{source_name}", item.get("source_name", ""))
+        prompt = prompt.replace("{source_type}", item.get("source_type", ""))
+        prompt = prompt.replace("{summary}", item.get("summary", ""))
+
+        for p in chain:
+            key_env = p.get("api_key_env", "")
+            api_key = os.getenv(key_env, "")
+            if not api_key:
+                continue
+            try:
+                if p["provider"] == "google_ai_studio":
+                    sco, reason = _score_google(prompt, p, api_key)
+                else:
+                    sco, reason = _score_openrouter(prompt, p, api_key)
+                if sco > 0:
+                    item["score"] = sco
+                    item["reason"] = reason
+                    break
+            except Exception:
+                continue
+        item.setdefault("score", 0)
+        item.setdefault("reason", "")
+
+
+def _score_google(prompt: str, p: dict, api_key: str) -> Tuple[int, str]:
+    url = f"{p['base_url']}/models/{p['model']}:generateContent?key={api_key}"
+    payload = {
+        "contents": [{"parts": [{"text": prompt}]}],
+        "generationConfig": {"temperature": 0, "maxOutputTokens": 128},
+    }
+    st, body = http_post(url, payload)
+    if st != 200:
+        return 0, ""
+    try:
+        text = json.loads(body)["candidates"][0]["content"]["parts"][0]["text"]
+    except Exception:
+        return 0, ""
+    return _parse(text)
+
+
+def _score_openrouter(prompt: str, p: dict, api_key: str) -> Tuple[int, str]:
+    url = f"{p['base_url']}/chat/completions"
+    # Check for rate limits
+    st, body = http_post(
+        url,
+        {
+            "model": p["model"],
+            "messages": [{"role": "user", "content": prompt}],
+            "temperature": 0,
+            "max_tokens": 128,
+        },
+        api_key=api_key,
+    )
+    if st == 429:
+        return 0, "rate_limited"
+    if st != 200:
+        return 0, ""
+    try:
+        text = json.loads(body)["choices"][0]["message"]["content"]
+    except Exception:
+        return 0, ""
+    return _parse(text)
+
+
+def _parse(text: str) -> Tuple[int, str]:
+    try:
+        d = json.loads(text.strip())
+        return max(0, min(10, int(d.get("score", 0)))), str(d.get("reason", ""))
+    except Exception:
+        m = re.search(r"\{[^}]+\}", text)
+        if m:
+            try:
+                d = json.loads(m.group())
+                return max(0, min(10, int(d.get("score", 0)))), str(d.get("reason", ""))
+            except Exception:
+                pass
+    return 0, ""
+
+
+# ---------------------------------------------------------------------------
+# Push
+# ---------------------------------------------------------------------------
+
+
+def _webhook_url(rules: dict) -> str:
+    return os.getenv(rules.get("push", {}).get("webhook_env", ""), "")
+
+
+def push_realtime(items: List[dict], rules: dict) -> int:
+    wh = _webhook_url(rules)
+    if not wh:
+        print("[watchlist] WARNING: Feishu webhook not configured", file=sys.stderr)
+        return 0
+    threshold = rules.get("push", {}).get("realtime", {}).get("min_score", 9)
+    high = [it for it in items if it.get("score", 0) >= threshold]
+    pushed = 0
+    for it in high[:10]:
+        payload = {
+            "msg_type": "post",
+            "content": {
+                "post": {
+                    "zh_cn": {
+                        "title": f"\U0001f525 {it['score']}/10 | {it.get('target_domain', '')}",
+                        "content": [
+                            [{"tag": "text", "text": it.get("title", "")}],
+                            [
+                                {
+                                    "tag": "text",
+                                    "text": f"{it.get('source_name', '')} — {it.get('reason', '')}",
+                                }
+                            ],
+                            [
+                                {
+                                    "tag": "a",
+                                    "text": "\u67e5\u770b\u539f\u6587",
+                                    "href": it.get("url", ""),
+                                }
+                            ],
+                        ],
+                    }
+                }
+            },
+        }
+        st, _ = http_post(wh, payload)
+        if st == 200:
+            it["realtime_pushed"] = True
+            pushed += 1
+        time.sleep(0.3)
+    return pushed
+
+
+def push_digest(items: List[dict], rules: dict, state: dict) -> bool:
+    wh = _webhook_url(rules)
+    if not wh:
+        return False
+    plog = state.setdefault("push_log", {})
+    if plog.get("daily_digest_last_sent") == today_str():
+        return False
+
+    min_s = rules.get("push", {}).get("daily_digest", {}).get("min_score", 6)
+    digest = [
+        it
+        for it in items
+        if it.get("score", 0) >= min_s and not it.get("realtime_pushed")
+    ]
+    if not digest:
+        return False
+
+    digest.sort(key=lambda x: -x.get("score", 0))
+    dstr = datetime.now(TZ_UTC8).strftime("%Y\u5e74%m\u6708%d\u65e5")
+    total = len(items)
+
+    elements = [
+        {
+            "tag": "div",
+            "text": {
+                "tag": "lark_md",
+                "content": f"\u4eca\u65e5\u53d1\u73b0 **{total}** \u6761\u5185\u5bb9\uff0c\u5176\u4e2d **{len(digest)}** \u6761\u503c\u5f97\u5173\u6ce8\uff1a",
+            },
+        },
+        {"tag": "hr"},
+    ]
+
+    for it in digest[:15]:
+        elements.append(
+            {
+                "tag": "div",
+                "text": {
+                    "tag": "lark_md",
+                    "content": (
+                        f"**{it['score']}/10** [{it.get('target_domain', '')}] {it.get('title', '')}\n"
+                        f"{it.get('source_name', '')} | {it.get('reason', '')}\n"
+                        f"[\u67e5\u770b\u539f\u6587]({it.get('url', '')})"
+                    ),
+                },
+            }
+        )
+        elements.append({"tag": "hr"})
+
+    payload = {
+        "msg_type": "interactive",
+        "card": {
+            "header": {
+                "title": {
+                    "tag": "plain_text",
+                    "content": f"\U0001f4cb \u6bcf\u65e5\u77e5\u8bc6\u6458\u8981 ({dstr})",
+                },
+                "template": "blue",
+            },
+            "elements": elements,
+        },
+    }
+    st, _ = http_post(wh, payload)
+    if st == 200:
+        plog["daily_digest_last_sent"] = today_str()
+        return True
+    return False
+
+
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
+
+
+def handler(signum, frame):
+    print("[watchlist] Timeout reached, shutting down", file=sys.stderr)
+    sys.exit(0)
+
+
+def main() -> str:
+    signal.signal(signal.SIGALRM, handler)
+    signal.alarm(_DEADLINE_SEC)
+
+    try:
+        rules = yaml.safe_load(RULES_PATH.read_text())
+    except Exception as e:
+        return f"ERROR: {e}"
+
+    state = load_state()
+    sources = [s for s in rules.get("sources", []) if s.get("enabled")]
+    all_items: List[dict] = []
+
+    for src in sources:
+        sid = src["id"]
+        src_st = state.setdefault("sources", {}).setdefault(sid, {})
+        last = src_st.get("last_checked", "")
+        interval = src.get("poll_interval_sec", 3600)
+
+        if last:
+            try:
+                elapsed = (
+                    datetime.now(TZ_UTC8) - datetime.fromisoformat(last)
+                ).total_seconds()
+                if elapsed < interval:
+                    continue
+            except Exception:
+                pass
+
+        try:
+            stype = src.get("type", "")
+            if stype == "hackernews":
+                items = fetch_hn(src, state)
+            elif stype == "rss":
+                items = fetch_rss(src, state)
+            else:
+                items = []
+        except Exception as e:
+            print(f"[watchlist] {sid}: fetch error {e}", file=sys.stderr)
+            items = []
+
+        if items:
+            domain = src.get("target_domain", "")
+            score_items(items, domain, rules)
+            for it in items:
+                it["target_domain"] = domain
+            all_items.extend(items)
+
+        src_st["last_checked"] = now_iso()
+        time.sleep(0.5)
+
+    # Push
+    n_rt = push_realtime(all_items, rules)
+    is_digest = datetime.now(TZ_UTC8).hour == 9 and datetime.now(TZ_UTC8).minute < 5
+    n_dg = 0
+    if is_digest:
+        n_dg = 1 if push_digest(all_items, rules, state) else 0
+
+    # Cleanup old seen items
+    cutoff = datetime.now(TZ_UTC8) - timedelta(
+        hours=rules.get("push", {}).get("deduplication", {}).get("seen_ttl_hours", 168)
+    )
+    seen = state.get("seen_items", {})
+    stale = [k for k, v in seen.items() if datetime.fromisoformat(v[:19]) < cutoff]
+    for k in stale:
+        del seen[k]
+
+    save_state(state)
+    signal.alarm(0)
+
+    if not all_items:
+        return SILENT
+    return f"Watchlist: {len(all_items)} items, scored {sum(1 for it in all_items if it.get('score', 0) > 0)}, rt_push={n_rt}, digest={n_dg}"
+
+
+if __name__ == "__main__":
+    print(main())
