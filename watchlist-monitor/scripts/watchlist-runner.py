@@ -16,6 +16,16 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import feedparser, requests, yaml
 
+# Load Hermes .env so no_agent cron subprocess has access to API keys
+_DOTENV_PATH = Path(os.path.expanduser("~/.hermes/.env"))
+if _DOTENV_PATH.exists():
+    try:
+        from dotenv import load_dotenv
+
+        load_dotenv(str(_DOTENV_PATH), override=True)
+    except ImportError:
+        pass
+
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
@@ -293,7 +303,10 @@ def score_items(items: List[dict], target_domain: str, rules: dict) -> None:
         return
 
     scored = 0
-    _MAX_SCORE = 15  # max items to score per cycle (stay within 180s deadline)
+    _MAX_SCORE = 15  # max items to score per cycle
+    _SCORE_LIMIT_SEC = 140  # stop scoring after this many seconds for fetch+push
+
+    score_start = time.time()
 
     for item in items:
         if scored >= _MAX_SCORE:
@@ -305,13 +318,21 @@ def score_items(items: List[dict], target_domain: str, rules: dict) -> None:
         prompt = prompt.replace("{source_type}", item.get("source_type", ""))
         prompt = prompt.replace("{summary}", item.get("summary", ""))
 
-        for p in chain:
-            key_env = p.get("api_key_env", "")
-            api_key = os.getenv(key_env, "")
-            fb_env = p.get("api_key_fallback_env", "")
-            api_key_fb = os.getenv(fb_env, "") if fb_env else ""
-            keys = [k for k in [api_key, api_key_fb] if k]
+        # Time-box scoring: if we are running out of time, stop scoring
+        if time.time() - score_start > _SCORE_LIMIT_SEC:
+            break
 
+        for p in chain:
+            # Each provider tries primary key first, fallback key only on 429
+            key_env = p.get("api_key_env", "")
+            keys = [
+                k
+                for k in [
+                    os.getenv(key_env, ""),
+                    os.getenv(p.get("api_key_fallback_env", ""), ""),
+                ]
+                if k
+            ]
             if not keys:
                 continue
             for cur_key in keys:
