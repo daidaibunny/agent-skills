@@ -285,6 +285,36 @@ opencli --profile udmzuh2k <site> <test-command> -f json
 | `udmzuh2k` | Local Mac | Your Chrome |
 | `dwq6qaxw` | Hermes Server | systemd Chrome service |
 
+## Cookie Management
+
+Browser sources need login cookies in the server Chrome SQLite database
+(`~/.config/google-chrome-opencli/Default/Cookies`). When cookies expire:
+
+1. **ABORT immediately.** Do not retry.
+2. Tell user: `⚠️ [site] login expired. Log in on Chrome → tell me → I sync.`
+3. After user confirms: export from local Chrome SQLite → scp to server → inject into server Chrome SQLite → `systemctl --user restart chrome-opencli`.
+4. Retry.
+
+**Export (macOS)**:
+```bash
+python3 -c "import sqlite3,json,shutil;shutil.copy2('$HOME/Library/Application Support/Google/Chrome/Default/Cookies','/tmp/c.db');conn=sqlite3.connect('/tmp/c.db');rows=conn.execute('SELECT host_key,name,value,path,is_secure,is_httponly,expires_utc FROM cookies WHERE host_key LIKE ?',('%xueqiu.com%',)).fetchall();json.dump([{'name':r[1],'value':r[2],'domain':r[0],'path':r[3],'secure':bool(r[4]),'httpOnly':bool(r[5]),'expires':r[6]/1000000-11644473600 if r[6] else -1} for r in rows],open('/tmp/cookies.json','w'));print(f'{len(rows)} cookies')"
+```
+
+**Import (server)**:
+```bash
+systemctl --user stop chrome-opencli
+python3 -c "
+import sqlite3,json,time;d=json.load(open('/tmp/cookies.json'));db='$HOME/.config/google-chrome-opencli/Default/Cookies';c=sqlite3.connect(db);n=int((time.time()+11644473600)*1e6)
+for x in d:
+ e=int((x['expires']+11644473600)*1e6) if x['expires']>0 else 0;h=1 if x['expires']>0 else 0
+ c.execute('INSERT OR REPLACE INTO cookies VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',(n,x['domain'],'',x['name'],x['value'],b'',x.get('path','/'),e,x.get('secure',0),x.get('httpOnly',0),n,h,h,1,-1,2 if x.get('secure') else 0,443 if x.get('secure') else 80,n,0,0))
+c.commit();c.close()
+"
+systemctl --user start chrome-opencli
+```
+
+**Twitter/X**: IP-bound sessions. Do NOT use `opencli twitter` on server. Use Playwright `x_scraper.js` at `~/.hermes/scripts/` which has its own profile with consistent server-IP cookies.
+
 ---
 
 ## Integration With Watchlist
