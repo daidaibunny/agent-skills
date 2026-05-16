@@ -261,14 +261,25 @@ opencli --profile udmzuh2k <site> <test-command> -f json
 
 ### Tracked Login Status
 
-Maintain a mental (or file-based) tracker of which sites are currently authenticated:
-
-| Site | Status | Last Verified |
-|------|--------|---------------|
-| `twitter` | ✅ Logged in | 2026-05-14 |
-| `xueqiu` | ❓ Unknown | - |
-| `zhihu` | ❓ Unknown | - |
-| `bilibili` | ❓ Unknown | - |
+| Site | Status | Last Verified | Notes |
+|------|--------|---------------|-------|
+| `twitter` | ✅ Logged in | 2026-05-16 | Full access |
+| `xueqiu` | ✅ Logged in | 2026-05-16 | Full access |
+| `linkedin` | ✅ Logged in | 2026-05-16 | Timeline works |
+| `tiktok` | ✅ Partial | 2026-05-16 | Explore works without login |
+| `weixin` | ✅ Partial | 2026-05-16 | Search works |
+| `youtube` | ✅ Public | 2026-05-16 | Search works |
+| `substack` | ✅ Public | 2026-05-16 | Feed works |
+| `medium` | ✅ Public | 2026-05-16 | Feed works |
+| `zhihu` | ❌ Not logged in | 2026-05-16 | Returns empty array |
+| `eastmoney` | ❌ Not logged in | 2026-05-16 | Timeout |
+| `jike` | ❌ Not logged in | 2026-05-16 | Returns empty array |
+| `instagram` | ❌ Not logged in | 2026-05-16 | UNKNOWN error |
+| `weread` | ❌ Not logged in | 2026-05-16 | AUTH_REQUIRED |
+| `boss` | ❌ Not logged in | 2026-05-16 | AUTH_REQUIRED |
+| `pixiv` | ❓ Unknown | - | Not tested |
+| `facebook` | ❓ Unknown | - | Not tested |
+| `spotify` | ❓ Not configured | - | OAuth setup needed |
 
 ---
 
