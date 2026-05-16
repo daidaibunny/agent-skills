@@ -344,6 +344,81 @@ def fetch_x_scrape(source: dict, state: dict, scripts_dir: Path) -> List[dict]:
     return items
 
 
+def fetch_opencli(source: dict, state: dict) -> List[dict]:
+    """Fetch content via OpenCLI CLI — public API and browser-backed sources."""
+    items = []
+    sid = source["id"]
+    site = source.get("site", "")
+    cmd = source.get("command", "")
+    profile = source.get("profile", "")
+    fcfg = source.get("filter", {})
+    max_n = fcfg.get("max_items_per_cycle", 20)
+
+    if not site or not cmd:
+        return items
+
+    args = [source.get("cli", "opencli"), "--profile", profile, site, cmd]
+    if profile == "":
+        args.remove("--profile")
+        args.remove("")
+    args += source.get("args", [])
+    args += ["-f", "json"]
+
+    result = subprocess.run(args, capture_output=True, text=True, timeout=30)
+    if result.returncode != 0 or not result.stdout.strip():
+        return items
+
+    try:
+        data = json.loads(result.stdout)
+    except Exception:
+        return items
+
+    if not isinstance(data, list):
+        data = [data]
+
+    seen = state.setdefault("seen_items", {})
+    n = 0
+
+    for item in data:
+        if n >= max_n:
+            break
+        # Build unique key from available fields
+        raw_id = (
+            item.get("id")
+            or item.get("link")
+            or item.get("url")
+            or item.get("title", "")
+        )
+        key = f"opencli:{sid}:{hashlib.md5(str(raw_id).encode()).hexdigest()[:12]}"
+        if key in seen:
+            continue
+
+        title = item.get("title", "") or item.get("name", "") or item.get("topic", "")
+        url = item.get("link") or item.get("url") or item.get("uri", "")
+        summary = (
+            item.get("summary")
+            or item.get("content_text")
+            or item.get("description", "")
+            or ""
+        )
+        summary = (summary or "")[:400]
+
+        items.append(
+            {
+                "id": key,
+                "title": title,
+                "url": url,
+                "summary": summary,
+                "source_name": f"{site}/{cmd}",
+                "source_type": "opencli",
+            }
+        )
+        seen[key] = now_iso()
+        n += 1
+
+    return items
+
+
 # ---------------------------------------------------------------------------
 # Scoring
 # ---------------------------------------------------------------------------
@@ -412,38 +487,37 @@ def _score_google(prompt: str, p: dict, api_key: str) -> Tuple[int, str]:
         "contents": [{"parts": [{"text": prompt}]}],
         "generationConfig": {"temperature": 0, "maxOutputTokens": 128},
     }
-    st, body = http_post(url, payload)
-    if st != 200:
-        return 0, ""
     try:
-        text = json.loads(body)["candidates"][0]["content"]["parts"][0]["text"]
+        r = requests.post(url, json=payload, timeout=8)
+        if r.status_code == 429:
+            return 0, "google_ratelimited"
+        if r.status_code != 200:
+            return 0, ""
+        text = json.loads(r.text)["candidates"][0]["content"]["parts"][0]["text"]
+        return _parse(text)
     except Exception:
         return 0, ""
-    return _parse(text)
 
 
 def _score_openrouter(prompt: str, p: dict, api_key: str) -> Tuple[int, str]:
     url = f"{p['base_url']}/chat/completions"
-    # Check for rate limits
-    st, body = http_post(
-        url,
-        {
-            "model": p["model"],
-            "messages": [{"role": "user", "content": prompt}],
-            "temperature": 0,
-            "max_tokens": 128,
-        },
-        api_key=api_key,
-    )
-    if st == 429:
-        return 0, "rate_limited"
-    if st != 200:
-        return 0, ""
+    h = {"Authorization": f"Bearer {api_key}"}
+    payload = {
+        "model": p["model"],
+        "messages": [{"role": "user", "content": prompt}],
+        "temperature": 0,
+        "max_tokens": 128,
+    }
     try:
-        text = json.loads(body)["choices"][0]["message"]["content"]
+        r = requests.post(url, json=payload, headers=h, timeout=8)
+        if r.status_code == 429:
+            return 0, "openrouter_ratelimited"
+        if r.status_code != 200:
+            return 0, ""
+        text = r.json()["choices"][0]["message"]["content"]
+        return _parse(text)
     except Exception:
         return 0, ""
-    return _parse(text)
 
 
 def _parse(text: str) -> Tuple[int, str]:
@@ -691,6 +765,7 @@ def main() -> str:
 
     state = load_state()
     sources = [s for s in rules.get("sources", []) if s.get("enabled")]
+    scripts_dir = Path(__file__).parent
     all_items: List[dict] = []
 
     for src in sources:
@@ -718,7 +793,9 @@ def main() -> str:
             elif stype == "wallstreetcn":
                 items = fetch_wallstreetcn(src, state)
             elif stype == "x_scrape":
-                items = fetch_x_scrape(src, state, Path(__file__).parent)
+                items = fetch_x_scrape(src, state, scripts_dir)
+            elif stype == "opencli":
+                items = fetch_opencli(src, state)
             else:
                 items = []
         except Exception as e:
