@@ -69,14 +69,13 @@ Should show:
 ### 4. Profile Management
 
 ```bash
-opencli profile list          # list connected Chrome profiles
-opencli profile use <ctxId>   # set default profile
+opencli profile list          # list connected profiles
+opencli profile use <ctxId>   # set default (local: udmzuh2k, server: dwq6qaxw)
 ```
 
-Use `--profile <ctxId>` to target a specific profile:
-```bash
-opencli --profile udmzuh2k twitter tweets @user -f json
-```
+Use `--profile <ctxId>` per-command. Without it, `opencli` uses the default.
+Public API commands (HN, StackOverflow, CoinGecko, etc.) ignore the profile and
+work identically on both local and server.
 
 ## Usage Pattern
 
@@ -85,53 +84,17 @@ opencli --profile udmzuh2k twitter tweets @user -f json
 **ALWAYS prefer opencli over any other method** (Playwright, direct HTTP, RSS parsing)
 when the target site is in the SOURCE_REGISTRY below.
 
-Standard invocation:
+Universal pattern (works both local and server):
 
 ```bash
+# Server agent (profile dwq6qaxw):
+opencli --profile dwq6qaxw <site> <command> [args] -f json
+
+# Local agent (profile udmzuh2k):
 opencli --profile udmzuh2k <site> <command> [args] -f json
-```
 
-Examples:
-
-```bash
-# Twitter/X
-opencli --profile udmzuh2k twitter tweets @Michael_Liu93 --limit 5 -f json
-
-# HackerNews
-opencli --profile udmzuh2k hackernews top --limit 10 -f json
-
-# Reddit
-opencli --profile udmzuh2k reddit hot --limit 10 -f json
-
-# Bloomberg (RSS, no auth)
-opencli --profile udmzuh2k bloomberg markets --limit 10 -f json
-
-# Xueqiu (雪球)
-opencli --profile udmzuh2k xueqiu hot-stock -f json
-
-# Sina Finance (新浪财经)
-opencli --profile udmzuh2k sinafinance rolling-news -f json
-
-# 36Kr
-opencli --profile udmzuh2k 36kr hot --limit 10 -f json
-
-# CoinGecko
-opencli --profile udmzuh2k coingecko trending -f json
-
-# Bilibili
-opencli --profile udmzuh2k bilibili hot --limit 10 -f json
-
-# StackOverflow
-opencli --profile udmzuh2k stackoverflow hot -f json
-
-# DevTo
-opencli --profile udmzuh2k devto top -f json
-
-# Yahoo Finance
-opencli --profile udmzuh2k yahoo-finance quote TSLA -f json
-
-# Substack
-opencli --profile udmzuh2k substack feed -f json
+# Public API (no profile needed, works everywhere):
+opencli <site> <command> [args] -f json
 ```
 
 **Output format**: Always use `-f json` for machine-readable output. Also available:
@@ -240,17 +203,15 @@ Auth failure signals:
 - Error message containing "login", "auth", "unauthorized", "请登录"
 - Status codes indicating redirect to login page
 
-### 2. ABORT — Do NOT retry. Report to the user.
+### 2. ABORT — Do NOT retry.
+
+**Server agent**: Tell user to log in on their Mac Chrome, then offer to sync cookies.
+**Local agent**: Tell user to log in on their Chrome (same machine), then retry.
 
 ```
-⚠️ [site] requires login. Current session appears to be missing or expired.
-
-To fix:
-1. Open Chrome and navigate to [site URL]
-2. Sign in with your credentials
-3. Verify with: opencli --profile udmzuh2k [site] [test-command] -f json
-
-Once logged in, retry the operation.
+⚠️ [site] login expired.
+→ Server: "Log in on your Mac Chrome. I'll export and sync cookies."
+→ Local: "Log in on Chrome, then tell me to retry."
 ```
 
 ### 3. VERIFY — After user confirms login
@@ -278,12 +239,38 @@ opencli --profile udmzuh2k <site> <test-command> -f json
 | `weread` | ❌ Not logged in | 2026-05-16 | AUTH_REQUIRED |
 | `boss` | ❌ Not logged in | 2026-05-16 | AUTH_REQUIRED |
 
-### Server Profiles
+### Location Detection
 
-| Profile ID | Location | Chrome |
-|------------|----------|--------|
-| `udmzuh2k` | Local Mac | Your Chrome |
-| `dwq6qaxw` | Hermes Server | systemd Chrome service |
+Agents must determine their location before using OpenCLI. The correct profile
+and capabilities differ by environment.
+
+```bash
+# Server: hostname starts with 'ip-' AND chrome-opencli service exists
+hostname | grep -q "^ip-" && systemctl --user is-active chrome-opencli 2>/dev/null && LOCATION="SERVER" || LOCATION="LOCAL"
+```
+
+### Location Rules
+
+| Environment | Profile | Capabilities | Cookie source |
+|-------------|---------|-------------|---------------|
+| **Local (Mac)** | `--profile udmzuh2k` | All browser sources via real Chrome | `~/Library/Application Support/Google/Chrome/Default/Cookies` |
+| **Server (Hermes)** | `--profile dwq6qaxw` | Public API + Xueqiu only. Twitter → Playwright `x_scraper.js` | User exports from Mac → agent injects |
+
+**Server agents**: Always use `--profile dwq6qaxw`. For Twitter, use `x_scraper.js` (not `opencli twitter` — IP-bound sessions fail).
+**Local agents**: Always use `--profile udmzuh2k`. Can export cookies for server sync.
+
+### Usage Examples
+
+Use the profile matching your location. Public API sources work without a profile:
+
+```bash
+# Public API (both locations)
+opencli hackernews top --limit 10 -f json
+
+# Browser sources — use correct profile
+opencli --profile dwq6qaxw xueqiu hot-stock -f json    # server
+opencli --profile udmzuh2k twitter tweets @user -f json  # local only
+```
 
 ## Cookie Management
 
@@ -347,20 +334,14 @@ sources:
     type: opencli
     site: twitter
     command: tweets
-    profile: udmzuh2k
-    accounts: ["@Michael_Liu93", "@ShanghaoJin", "@gemchange_ltd"]
-    
-  - id: reddit-hot
-    type: opencli
-    site: reddit
-    command: hot
-    profile: udmzuh2k
+    profile: dwq6qaxw         # server profile (change to udmzuh2k for local)
+    accounts: ["@Michael_Liu93", "@ShanghaoJin"]
     
   - id: hackernews-top
     type: opencli
     site: hackernews
     command: top
-    # public — no profile needed
+    # public — no profile needed, works both local and server
 ```
 
 ---
