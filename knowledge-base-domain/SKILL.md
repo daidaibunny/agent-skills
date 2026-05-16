@@ -262,12 +262,5 @@ are in sync:
 
 ## Cross-Domain Synthesis Matrix
 
-When creating, renaming, or removing a domain, update the synthesis status matrix in
-`wiki/wow-moment/index.md`:
-
-1. **Creating a domain**: Add a row for the new domain with status `pending`.
-2. **Removing a domain**: Remove the domain's row from the matrix. Check
-   `wiki/wow-moment/entity.md` for wow moments referencing the removed domain and present
-   them to the user for review before deletion.
-3. **Renaming a domain**: Update the domain name in the matrix row.
-4. Include these changes in the Step 7 commit.
+When creating, renaming, or removing a domain, update the wow-moment synthesis matrix.
+See [[wiki/knowledge-base/wow-moment-synthesize_summary|wow-moment-synthesize]] for the protocol.

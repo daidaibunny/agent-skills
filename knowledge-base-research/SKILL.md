@@ -270,12 +270,5 @@ git push origin main
 
 ## Cross-Domain Synthesis Matrix
 
-After updating `concept.md` or `entity.md` with new or modified entries during Step 6,
-update the synthesis status matrix in `wiki/wow-moment/index.md`:
-
-1. Read the matrix if `wiki/wow-moment/index.md` exists (it may not if the wow-moment
-   domain has not been created yet — skip this step in that case).
-2. In the `## Synthesis Status` table, set each affected domain's status to `pending`
-   and update the `Concepts Since` column.
-3. If an affected domain does not yet have a row, add one with status `pending`.
-4. Include this change in the Step 8 commit.
+After updating concepts or entities, update the wow-moment synthesis matrix.
+See [[wiki/knowledge-base/wow-moment-synthesize_summary|wow-moment-synthesize]] for the protocol.

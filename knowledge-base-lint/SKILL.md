@@ -227,13 +227,5 @@ git push origin main
 
 ## Cross-Domain Synthesis Matrix
 
-When a structural lint operation modifies `concept.md` or `entity.md` entries (merging
-duplicate concepts, adding missing entries, correcting cross-references), update the
-synthesis status matrix in `wiki/wow-moment/index.md`:
-
-1. Read the matrix if `wiki/wow-moment/index.md` exists (it may not if the wow-moment
-   domain has not been created yet — skip this step in that case).
-2. In the `## Synthesis Status` table, set each affected domain's status to `pending`
-   and update the `Concepts Since` column to reflect what changed.
-3. If an affected domain does not yet have a row, add one with status `pending`.
-4. Include this change in the commit.
+After structural lint modifications to concepts or entities, update the wow-moment
+synthesis matrix. See [[wiki/knowledge-base/wow-moment-synthesize_summary|wow-moment-synthesize]] for the protocol.
