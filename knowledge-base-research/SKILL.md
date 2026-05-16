@@ -28,14 +28,19 @@ When searching for supplementary high-quality sources, follow this priority.
 Network accessibility data is maintained in the `knowledge-base-clip` skill
 (Network Capabilities Reference) and this project's `AGENTS.md` → Network Access.
 
-1. **Stack Exchange API** — `api.stackexchange.com/2.3/search?order=desc&sort=votes&intitle=<term>&site=stackoverflow`. Works without proxy. Use `webfetch` for direct question URLs (CAPTCHA-free). Do NOT use the web search page (triggers CAPTCHA).
-2. **Industry blogs** — Fingerprint.com, Cloudflare Blog, Mozilla Hacks, Google Security Blog. Direct HTTP, no proxy needed.
-3. **Official docs** — RFC, W3C, MDN, protocol specifications. Always accessible.
-4. **fxtwitter API** — `GET api.fxtwitter.com/<user>/status/<tweet-id>` for resolving X/Twitter tweet content and quoted tweets.
-5. **Playwright browser** — Reserve for X/Twitter (logged-in browsing) and WeChat (walled-garden). For X/Twitter: must use a persistent browser profile with login cookies. For all Playwright sessions: inject the Anti-Detection Bootstrap from the `knowledge-base-clip` skill before navigating.
-6. **Skip Reddit** — Blocked ("Please wait for verification"). Do not attempt.
-7. **Skip Google Search** — JS redirect loop. Do not attempt.
-8. **Do not use curl** — Prefer `webfetch` for HTTP content, Playwright for browser-required content.
+**ALWAYS CHECK OpenCLI FIRST** — if the target site is in the OpenCLI source registry
+(`skills/opencli/SKILL.md`), use `opencli <site> <command> -f json` for structured,
+deterministic access with zero anti-detection issues.
+
+0. **OpenCLI (NEW — highest priority)** — `opencli <site> <command> -f json`. Use for any
+   site in the registry: HackerNews, Reddit, StackOverflow, Twitter/X, Bloomberg,
+   CoinGecko, ProductHunt, DevTo, Bluesky, Xueqiu, Zhihu, Bilibili, and 80+ more.
+   See `skills/opencli/SKILL.md` for the complete list.
+1. **Stack Exchange API** — `api.stackexchange.com/2.3/search?...`. Use `webfetch` for
+   direct question URLs.
+2. **Industry blogs** — Fingerprint.com, Cloudflare Blog, Mozilla Hacks, etc. Direct HTTP.
+3. **Official docs** — RFC, W3C, MDN. Always accessible.
+4. **Playwright browser** — Fallback ONLY for sites NOT in the OpenCLI registry.
 
 ### Quality Filters
 

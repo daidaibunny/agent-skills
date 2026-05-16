@@ -333,31 +333,35 @@ sources:
 
 ## Server (Hermes) Setup
 
-For remote access (Hermes server without Chrome):
+### Architecture Decision
+
+After testing, the pragmatic architecture is:
+
+- **Server (Hermes)**: OpenCLI for **public API adapters only** (no Chrome needed). These work without any browser: hackernews, reddit, stackoverflow, coingecko, bloomberg (RSS), devto, bluesky, producthunt, etc.
+- **Local machine**: OpenCLI for **all sources** including browser-auth ones (Twitter, Xueqiu, Zhihu, Jike, etc.)
+- **X/Twitter on server**: Keep using Playwright `x_scraper.js` (already working, already has cookies)
+
+**Why not Chrome on server?**
+- Server has 1.9GB RAM. Chrome + Playwright Chromium + Hermes + Docker stack = OOM.
+- Headless Chrome doesn't support extensions properly.
+- Public API adapters don't need Chrome at all.
+
+### Server Installation (public API only)
 
 ```bash
-# 1. Install Chrome
-wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | sudo apt-key add -
-sudo sh -c 'echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google-chrome.list'
-sudo apt update && sudo apt install -y google-chrome-stable
-
-# 2. Install OpenCLI
 npm install -g @jackwener/opencli
-
-# 3. Install Chrome Extension (manual)
-# Download from https://github.com/jackwener/opencli/releases
-# Load unpacked extension in chrome://extensions
-
-# 4. Start Chrome with remote debugging
-google-chrome-stable --headless --remote-debugging-port=9222 --no-sandbox &
-
-# 5. Verify
-opencli doctor
+opencli hackernews top --limit 1 -f json  # verify
 ```
 
-⚠️ **Memory warning**: Chrome + daemon on the Hermes server (1.9GB RAM) will be tight.
-Monitor memory usage. If OOM, run Chrome in `--headless` mode without GPU and limit
-its memory.
+No Chrome needed. The daemon auto-starts when `opencli` is called.
+
+### Local Installation (full)
+
+```bash
+npm install -g @jackwener/opencli
+# Install Chrome Extension from Chrome Web Store
+opencli doctor  # verify extension connected
+```
 
 ---
 

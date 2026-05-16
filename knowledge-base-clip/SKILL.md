@@ -19,6 +19,10 @@ downloading, approval gating, and automatic ingest.
 
 - The user must send a URL to be clipped (typically via WeChat bot routed through Hermes
   agent).
+- **Internet access preference**: For sites supported by OpenCLI, use the `opencli` CLI
+  (`skills/opencli/SKILL.md`) first. OpenCLI provides structured JSON output from 100+
+  sites through a Chrome Extension bridge with zero anti-detection issues. Only fall back
+  to Playwright when the site is NOT in the OpenCLI source registry.
 - A browser-capable agent must be available to open the URL and extract content from
   walled-garden sources that cannot be fetched with simple HTTP requests.
 - Clip handles the full pipeline: extract content, download images, save to `raw/`,
