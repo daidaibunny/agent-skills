@@ -380,12 +380,26 @@ def fetch_opencli(source: dict, state: dict) -> List[dict]:
         data = [data]
 
     seen = state.setdefault("seen_items", {})
+    keywords = [k.lower() for k in fcfg.get("keywords", [])]
     n = 0
 
     for item in data:
         if n >= max_n:
             break
-        # Build unique key from available fields
+
+        title = item.get("title", "") or item.get("name", "") or item.get("topic", "")
+        title_l = title.lower()
+        summary_raw = (
+            item.get("summary")
+            or item.get("content_text")
+            or item.get("description", "")
+            or ""
+        ).lower()
+
+        # Keyword filter — skip items that don't match any keyword
+        if keywords and not any(k in title_l or k in summary_raw for k in keywords):
+            continue
+
         raw_id = (
             item.get("id")
             or item.get("link")
@@ -396,15 +410,8 @@ def fetch_opencli(source: dict, state: dict) -> List[dict]:
         if key in seen:
             continue
 
-        title = item.get("title", "") or item.get("name", "") or item.get("topic", "")
         url = item.get("link") or item.get("url") or item.get("uri", "")
-        summary = (
-            item.get("summary")
-            or item.get("content_text")
-            or item.get("description", "")
-            or ""
-        )
-        summary = (summary or "")[:400]
+        summary = (summary_raw or "")[:400]
 
         items.append(
             {
