@@ -271,15 +271,19 @@ opencli --profile udmzuh2k <site> <test-command> -f json
 | `youtube` | ✅ Public | 2026-05-16 | Search works |
 | `substack` | ✅ Public | 2026-05-16 | Feed works |
 | `medium` | ✅ Public | 2026-05-16 | Feed works |
-| `zhihu` | ❌ Not logged in | 2026-05-16 | Returns empty array |
-| `eastmoney` | ❌ Not logged in | 2026-05-16 | Timeout |
-| `jike` | ❌ Not logged in | 2026-05-16 | Returns empty array |
+| `zhihu` | ✅ Logged in | 2026-05-16 | Hot works |
+| `jike` | ✅ Logged in | 2026-05-16 | Feed works |
+| `eastmoney` | ❌ Timeout | 2026-05-16 | Adapter timeout |
 | `instagram` | ❌ Not logged in | 2026-05-16 | UNKNOWN error |
 | `weread` | ❌ Not logged in | 2026-05-16 | AUTH_REQUIRED |
 | `boss` | ❌ Not logged in | 2026-05-16 | AUTH_REQUIRED |
-| `pixiv` | ❓ Unknown | - | Not tested |
-| `facebook` | ❓ Unknown | - | Not tested |
-| `spotify` | ❓ Not configured | - | OAuth setup needed |
+
+### Server Profiles
+
+| Profile ID | Location | Chrome |
+|------------|----------|--------|
+| `udmzuh2k` | Local Mac | Your Chrome |
+| `dwq6qaxw` | Hermes Server | systemd Chrome service |
 
 ---
 
