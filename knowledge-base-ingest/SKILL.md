@@ -86,11 +86,23 @@ pages.
 5. Read the matching wiki scope's `index.md`, `concept.md`, and `entity.md`.
 6. Search for related existing concepts, entities, and summaries before writing.
 7. Read the raw source.
-8. Create or update one summary named `<source-slug>_summary.md` with Obsidian-safe
+8. **TokenJuice compression** — Before passing source content to LLM for analysis,
+   compress it using the `ingest_source` ruleset. This reduces token cost by ~50%
+   while preserving all signal:
+
+   ```python
+   from tokenjuice import compress
+   compressed = compress(raw_content, tool="ingest_source")
+   ```
+
+   The `ingest_source` ruleset preserves markdown links and image embeds
+   (`![[raw/assets/...]]`) while stripping HTML and normalizing whitespace.
+
+9. Create or update one summary named `<source-slug>_summary.md` with Obsidian-safe
    source metadata.
-9. Update `concept.md` for reusable ideas, mechanisms, methods, claims, or problem
-   types from the source.
-10. Update `entity.md` for named people, organizations, products, models, tools,
+10. Update `concept.md` for reusable ideas, mechanisms, methods, claims, or problem
+    types from the source.
+11. Update `entity.md` for named people, organizations, products, models, tools,
    benchmarks, datasets, papers, projects, or named workflows.
 11. Update the matching scope index and global index.
 12. If a new tag is necessary, first check `wiki/index.md` for a similar tag. Reuse an

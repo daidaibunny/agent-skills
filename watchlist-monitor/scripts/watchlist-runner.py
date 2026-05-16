@@ -16,6 +16,9 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import feedparser, requests, yaml
 
+# TokenJuice — text compression before LLM scoring (reduces token cost ~50%)
+from tokenjuice import compress as tj_compress
+
 # Load Hermes .env so no_agent cron subprocess has access to API keys
 _DOTENV_PATH = Path(os.path.expanduser("~/.hermes/.env"))
 if _DOTENV_PATH.exists():
@@ -445,7 +448,9 @@ def score_items(items: List[dict], target_domain: str, rules: dict) -> None:
         prompt = prompt.replace("{title}", item.get("title", ""))
         prompt = prompt.replace("{source_name}", item.get("source_name", ""))
         prompt = prompt.replace("{source_type}", item.get("source_type", ""))
-        prompt = prompt.replace("{summary}", item.get("summary", ""))
+        # Compress summary via TokenJuice before scoring (saves ~50% tokens)
+        summary = tj_compress(item.get("summary", ""), "score_items")
+        prompt = prompt.replace("{summary}", summary)
 
         # Time-box scoring: if we are running out of time, stop scoring
         if time.time() - score_start > _SCORE_LIMIT_SEC:
